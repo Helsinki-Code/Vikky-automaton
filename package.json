@@ -13,7 +13,7 @@
     "dev:agent-only": "eve dev",
     "build:agent-only": "eve build",
     "eval": "eve eval",
-    "typecheck": "tsc",
+    "typecheck": "tsc -p tsconfig.full.json",
     "erc8004:compile": "node scripts/compile-erc8004.mjs",
     "erc8004:deploy": "node scripts/deploy-erc8004.mjs"
   },
@@ -36,6 +36,6 @@
   },
   "devDependencies": {
     "solc": "^0.8.36",
-    "typescript": "7.0.2"
+    "typescript": "^5.9.3"
   }
 }
