@@ -97,3 +97,39 @@ export async function recentTransactions(limit = 10): Promise<LedgerTransaction[
 export async function ledgerCreatedAt(): Promise<string> {
   return (await load()).createdAt;
 }
+
+/**
+ * One-time correction: this ledger accumulated real balance from Stripe
+ * test-mode transactions (session ids like `cs_test_...`) before the
+ * account was switched to a live key. Test-mode money was never real —
+ * keeping it in the balance would misrepresent play money as real, the
+ * same honesty violation the "no fake genesis grant" rule already guards
+ * against. Wipes history down to just the real (`cs_live_...`) deposits,
+ * plus one adjustment entry documenting what was removed and why.
+ */
+export async function correctLedgerToLiveOnly(): Promise<Ledger> {
+  const ledger = await load();
+  const realDeposits = ledger.transactions.filter(
+    (t) => t.type === "deposit" && t.description.includes("cs_live_"),
+  );
+  const realTotalCents = realDeposits.reduce((sum, t) => sum + t.amountCents, 0);
+  const removedCount = ledger.transactions.length - realDeposits.length;
+
+  const corrected: Ledger = {
+    balanceCents: realTotalCents,
+    createdAt: ledger.createdAt,
+    transactions: [
+      ...realDeposits,
+      {
+        id: crypto.randomUUID(),
+        type: "adjustment",
+        amountCents: 0,
+        balanceAfterCents: realTotalCents,
+        description: `Ledger corrected: removed ${removedCount} test-mode transaction(s) (Stripe was in test mode before this point — that money was never real). Balance reset to the sum of actual live-mode deposits.`,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+  await writeJson(LEDGER_FILE, corrected);
+  return corrected;
+}
