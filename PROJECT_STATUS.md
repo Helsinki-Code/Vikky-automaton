@@ -154,6 +154,33 @@ faking success.
 
 ## 3. What's still pending — the real gap list
 
+### 3.0 🔴 Ledger/soul/memory/wallet state is not durable on Vercel yet
+
+**Found live in production, now stopgapped, not truly fixed.** `agent/lib/store.ts`
+persists everything (ledger, soul, memory, wallet, children registry) as plain
+JSON files under `.automaton/`. That's fine for local `eve dev`, but Vercel
+Functions have a **read-only filesystem** everywhere except `/tmp` — every
+write there was failing outright in production, `workflow-sdk` retried each
+failed step until exhausting its retry budget, and the whole turn crashed
+(visible in Vercel's runtime logs as `[workflow-sdk] Max retries reached,
+bubbling error to parent workflow`).
+
+**Stopgap applied:** `dataDir()` now writes to `/tmp/.automaton` when
+`process.env.VERCEL` is set, which stops the crash. **This is not real
+durability** — `/tmp` is wiped between cold starts and never shared across
+concurrent function instances, so the ledger balance, soul version, and even
+the wallet can silently reset. Do not treat production balances/history as
+trustworthy until this is replaced with a real database.
+
+**To actually fix:** swap the file-based `readJson`/`writeJson` in
+`agent/lib/store.ts` for a real persistent store behind the same two
+function signatures — a Vercel Marketplace Postgres or KV/Redis integration
+is the natural fit (`vercel:marketplace` skill / `vercel:vercel-storage`
+guidance covers provisioning). Every consumer (`ledger.ts`, `soul.ts`,
+`memory.ts`, `wallet.ts`, `registry.ts`, `heartbeat-state.ts`, `models.ts`)
+goes through this one module, so the fix is centralized — no call site
+elsewhere needs to change.
+
 ### 3.1 🟡 `spawn_child` doesn't auto-deploy
 
 Writes a genesis config into the sandbox and instructs manual deployment
@@ -170,7 +197,6 @@ instead of faking success:
 
 | Feature | Env vars needed |
 |---|---|
-| Vercel Sandbox (hosted) | `VERCEL_TOKEN`, `VERCEL_TEAM_ID` |
 | Cloudflare domains/DNS | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
 | Stripe deposits/withdrawals | `STRIPE_SECRET_KEY`, `STRIPE_CONNECTED_ACCOUNT_ID` |
 | ERC-8004 on-chain identity | `RPC_URL`, `ERC8004_REGISTRY_ADDRESS` (wallet is now auto-generated — no key env var needed) |

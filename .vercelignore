@@ -5,3 +5,9 @@ node_modules
 .output
 .nitro
 dist
+
+# Runtime state — contains the automaton's real private key (wallet.json)
+# plus ledger/memory/soul data. Vercel reads .vercelignore separately from
+# git's .gitignore for its own file-upload step, so this needs its own entry
+# even though .gitignore already excludes it. Never ship this.
+.automaton/

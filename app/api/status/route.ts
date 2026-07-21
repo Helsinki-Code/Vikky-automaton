@@ -16,7 +16,11 @@ export async function GET() {
       erc8004: !!(process.env.RPC_URL && process.env.ERC8004_REGISTRY_ADDRESS),
       telegram: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN),
       telegramChat: !!process.env.TELEGRAM_CHAT_ID,
-      vercelSandbox: !!(process.env.VERCEL_TOKEN && process.env.VERCEL_TEAM_ID),
+      // Not an env var to configure — eve's defaultBackend() auto-selects
+      // Vercel Sandbox whenever running on Vercel (process.env.VERCEL is set
+      // by the platform itself), using Vercel's own ambient credentials.
+      // Nothing reads a manual VERCEL_TOKEN/VERCEL_TEAM_ID in this project.
+      vercelSandbox: !!process.env.VERCEL,
     },
   });
 }

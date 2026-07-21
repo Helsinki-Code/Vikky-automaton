@@ -16,7 +16,7 @@ const INTEGRATION_LABELS: Record<string, { label: string; envVars: string; docs?
   erc8004: { label: "ERC-8004 on-chain identity", envVars: "RPC_URL, ERC8004_REGISTRY_ADDRESS", docs: "See contracts/README.md" },
   telegram: { label: "Telegram channel", envVars: "TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET_TOKEN" },
   telegramChat: { label: "Telegram status pings", envVars: "TELEGRAM_CHAT_ID" },
-  vercelSandbox: { label: "Hosted Vercel Sandbox", envVars: "VERCEL_TOKEN, VERCEL_TEAM_ID" },
+  vercelSandbox: { label: "Hosted Vercel Sandbox", envVars: "automatic on Vercel — no env var needed" },
 };
 
 export default function SettingsPage() {
