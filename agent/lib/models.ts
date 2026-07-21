@@ -25,12 +25,12 @@ export const MODEL_CATALOG: ModelEntry[] = [
 
 const SELECTED_FILE = "selected-model.json";
 
-export function getSelectedModel(): string {
-  return readJson<{ modelId: string }>(SELECTED_FILE, { modelId: "gpt-5.2" }).modelId;
+export async function getSelectedModel(): Promise<string> {
+  return (await readJson<{ modelId: string }>(SELECTED_FILE, { modelId: "gpt-5.2" })).modelId;
 }
 
-export function setSelectedModel(modelId: string): void {
-  writeJson(SELECTED_FILE, { modelId });
+export async function setSelectedModel(modelId: string): Promise<void> {
+  await writeJson(SELECTED_FILE, { modelId });
 }
 
 interface SpendRecord {
@@ -43,20 +43,20 @@ interface SpendRecord {
 
 const SPEND_FILE = "inference-spend.json";
 
-export function recordInferenceSpend(model: string, inputTokens: number, outputTokens: number): number {
+export async function recordInferenceSpend(model: string, inputTokens: number, outputTokens: number): Promise<number> {
   const entry = MODEL_CATALOG.find((m) => m.modelId === model);
   const costCents = entry
     ? (inputTokens / 1000) * entry.costPer1kInputCents + (outputTokens / 1000) * entry.costPer1kOutputCents
     : 0;
-  const records = readJson<SpendRecord[]>(SPEND_FILE, []);
+  const records = await readJson<SpendRecord[]>(SPEND_FILE, []);
   records.push({ model, inputTokens, outputTokens, costCents, timestamp: new Date().toISOString() });
-  writeJson(SPEND_FILE, records.slice(-1000));
+  await writeJson(SPEND_FILE, records.slice(-1000));
   return costCents;
 }
 
-export function getSpendSummary(sinceHours = 24): { totalCostCents: number; byModel: Record<string, number>; callCount: number } {
+export async function getSpendSummary(sinceHours = 24): Promise<{ totalCostCents: number; byModel: Record<string, number>; callCount: number }> {
   const cutoff = Date.now() - sinceHours * 3_600_000;
-  const records = readJson<SpendRecord[]>(SPEND_FILE, []).filter(
+  const records = (await readJson<SpendRecord[]>(SPEND_FILE, [])).filter(
     (r) => new Date(r.timestamp).getTime() > cutoff,
   );
   const byModel: Record<string, number> = {};

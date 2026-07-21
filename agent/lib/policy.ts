@@ -15,7 +15,7 @@ export const TREASURY_POLICY = {
   minimumReserveCents: 100, // keep $1 alive at all times
 } as const;
 
-export function checkTransfer(amountCents: number): { allowed: boolean; reason?: string } {
+export async function checkTransfer(amountCents: number): Promise<{ allowed: boolean; reason?: string }> {
   if (amountCents <= 0) {
     return { allowed: false, reason: "Transfer amount must be positive." };
   }
@@ -25,7 +25,7 @@ export function checkTransfer(amountCents: number): { allowed: boolean; reason?:
       reason: `Exceeds max single transfer of ${TREASURY_POLICY.maxSingleTransferCents} cents.`,
     };
   }
-  const balance = getBalanceCents();
+  const balance = await getBalanceCents();
   if (balance - amountCents < TREASURY_POLICY.minimumReserveCents) {
     return {
       allowed: false,
@@ -33,7 +33,7 @@ export function checkTransfer(amountCents: number): { allowed: boolean; reason?:
     };
   }
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
-  const dailyOut = recentTransactions(200)
+  const dailyOut = (await recentTransactions(200))
     .filter((t) => t.type === "transfer_out" && new Date(t.timestamp).getTime() > dayAgo)
     .reduce((sum, t) => sum + Math.abs(t.amountCents), 0);
   if (dailyOut + amountCents > TREASURY_POLICY.maxDailyTransferCents) {

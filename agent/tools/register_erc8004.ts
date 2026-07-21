@@ -12,7 +12,7 @@ export default defineTool({
     agentURI: z.string().url().describe("Publicly reachable URI describing this agent (an agent card JSON)"),
   }),
   async execute({ agentURI }) {
-    const existing = getRegistryEntry();
+    const existing = await getRegistryEntry();
     if (existing) {
       return { registered: false, reason: "Already registered on-chain.", existing };
     }
@@ -32,7 +32,7 @@ export default defineTool({
       txHash,
       registeredAt: new Date().toISOString(),
     };
-    setRegistryEntry(entry);
+    await setRegistryEntry(entry);
     return { registered: true, ...entry };
   },
 });

@@ -4,7 +4,7 @@
  * Replaces Conway's hosted credit system with a ledger the creator fully
  * controls. Balances are cents; tiers reuse the original automaton's
  * SURVIVAL_THRESHOLDS semantics. Every mutation appends a transaction, so
- * `.automaton/ledger.json` is a complete auditable history.
+ * the ledger is a complete auditable history.
  */
 
 import { readJson, writeJson } from "./store";
@@ -43,8 +43,8 @@ const LEDGER_FILE = "ledger.json";
  * money that was never actually paid, which is exactly the kind of claim
  * the Constitution's honesty law forbids.
  */
-function load(): Ledger {
-  const existing = readJson<Ledger | null>(LEDGER_FILE, null);
+async function load(): Promise<Ledger> {
+  const existing = await readJson<Ledger | null>(LEDGER_FILE, null);
   if (existing) return existing;
   const now = new Date().toISOString();
   const genesis: Ledger = {
@@ -52,15 +52,16 @@ function load(): Ledger {
     transactions: [],
     createdAt: now,
   };
-  writeJson(LEDGER_FILE, genesis);
+  await writeJson(LEDGER_FILE, genesis);
   return genesis;
 }
 
-export function getBalanceCents(): number {
-  return load().balanceCents;
+export async function getBalanceCents(): Promise<number> {
+  return (await load()).balanceCents;
 }
 
-export function getSurvivalTier(balanceCents = getBalanceCents()): SurvivalTier {
+/** Pure function, no I/O — always pass the balance explicitly. */
+export function getSurvivalTier(balanceCents: number): SurvivalTier {
   if (balanceCents < 0) return "dead";
   if (balanceCents <= SURVIVAL_THRESHOLDS.low_compute) return "critical";
   if (balanceCents <= SURVIVAL_THRESHOLDS.normal) return "low_compute";
@@ -68,12 +69,12 @@ export function getSurvivalTier(balanceCents = getBalanceCents()): SurvivalTier 
   return "high";
 }
 
-export function recordTransaction(
+export async function recordTransaction(
   type: LedgerTransaction["type"],
   amountCents: number,
   description: string,
-): LedgerTransaction {
-  const ledger = load();
+): Promise<LedgerTransaction> {
+  const ledger = await load();
   const balanceAfterCents = ledger.balanceCents + amountCents;
   const txn: LedgerTransaction = {
     id: crypto.randomUUID(),
@@ -85,14 +86,14 @@ export function recordTransaction(
   };
   ledger.balanceCents = balanceAfterCents;
   ledger.transactions.push(txn);
-  writeJson(LEDGER_FILE, ledger);
+  await writeJson(LEDGER_FILE, ledger);
   return txn;
 }
 
-export function recentTransactions(limit = 10): LedgerTransaction[] {
-  return load().transactions.slice(-limit).reverse();
+export async function recentTransactions(limit = 10): Promise<LedgerTransaction[]> {
+  return (await load()).transactions.slice(-limit).reverse();
 }
 
-export function ledgerCreatedAt(): string {
-  return load().createdAt;
+export async function ledgerCreatedAt(): Promise<string> {
+  return (await load()).createdAt;
 }

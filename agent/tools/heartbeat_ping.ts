@@ -7,9 +7,9 @@ export default defineTool({
   description: "Report a lightweight liveness ping: current state, tier, and balance. Cheaper than system_synopsis for frequent checks.",
   inputSchema: z.object({}),
   async execute() {
-    const balanceCents = getBalanceCents();
+    const balanceCents = await getBalanceCents();
     return {
-      ...getHeartbeatState(),
+      ...(await getHeartbeatState()),
       balanceCents,
       survivalTier: getSurvivalTier(balanceCents),
       timestamp: new Date().toISOString(),

@@ -7,7 +7,7 @@ export default defineTool({
     "Report this automaton's sovereign wallet address and chain type. The wallet is generated once automatically on first boot and never changes — this is your on-chain identity.",
   inputSchema: z.object({}),
   async execute() {
-    const wallet = getOrCreateWallet();
+    const wallet = await getOrCreateWallet();
     return {
       address: wallet.address,
       chainType: wallet.chainType,

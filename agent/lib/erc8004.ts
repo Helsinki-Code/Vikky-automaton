@@ -37,7 +37,7 @@ export async function registerAgentOnChain(
   config: Erc8004Config,
   agentURI: string,
 ): Promise<{ txHash: string; agentId?: string }> {
-  const account = getEvmAccount();
+  const account = await getEvmAccount();
   const transport = http(config.rpcUrl);
   // Matches scripts/deploy-erc8004.mjs's chain selection: same RPC_URL
   // convention decides mainnet vs testnet on both the deploy side and here.

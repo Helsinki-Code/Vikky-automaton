@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { MODEL_CATALOG, setSelectedModel } from "../lib/models";
-import { getSurvivalTier } from "../lib/ledger";
+import { getSurvivalTier, getBalanceCents } from "../lib/ledger";
 
 const TIER_ORDER = ["dead", "critical", "low_compute", "normal", "high"];
 
@@ -14,14 +14,14 @@ export default defineTool({
     if (!entry) {
       return { switched: false, reason: `Unknown model "${modelId}". Call list_models first.` };
     }
-    const tier = getSurvivalTier();
+    const tier = getSurvivalTier(await getBalanceCents());
     if (TIER_ORDER.indexOf(tier) < TIER_ORDER.indexOf(entry.tierMinimum)) {
       return {
         switched: false,
         reason: `"${modelId}" requires tier ${entry.tierMinimum} or above; you are at ${tier}.`,
       };
     }
-    setSelectedModel(modelId);
+    await setSelectedModel(modelId);
     return { switched: true, modelId };
   },
 });

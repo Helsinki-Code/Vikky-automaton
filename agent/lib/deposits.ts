@@ -29,7 +29,7 @@ export async function createDepositSession(
     `line_items[0][price_data][product_data][name]=${encodeURIComponent("Automaton ledger deposit")}`,
     `line_items[0][quantity]=1`,
   ]);
-  const pending = readJson<PendingDeposit[]>(PENDING_FILE, []);
+  const pending = await readJson<PendingDeposit[]>(PENDING_FILE, []);
   pending.push({
     sessionId: session.id,
     amountCents,
@@ -37,7 +37,7 @@ export async function createDepositSession(
     createdAt: new Date().toISOString(),
     credited: false,
   });
-  writeJson(PENDING_FILE, pending);
+  await writeJson(PENDING_FILE, pending);
   return { paymentUrl: session.url, checkoutSessionId: session.id };
 }
 
@@ -46,7 +46,7 @@ export type ConfirmDepositResult =
   | { credited: false; reason: string };
 
 export async function confirmDepositSession(checkoutSessionId: string): Promise<ConfirmDepositResult> {
-  const pending = readJson<PendingDeposit[]>(PENDING_FILE, []);
+  const pending = await readJson<PendingDeposit[]>(PENDING_FILE, []);
   const record = pending.find((p) => p.sessionId === checkoutSessionId);
   if (!record) {
     return { credited: false, reason: "Unknown checkout session." };
@@ -63,9 +63,9 @@ export async function confirmDepositSession(checkoutSessionId: string): Promise<
     return { credited: false, reason: `Payment status is "${session.payment_status}" — not paid yet.` };
   }
   const amountCents = session.amount_total;
-  const txn = recordTransaction("deposit", amountCents, `Stripe deposit ${checkoutSessionId}`);
+  const txn = await recordTransaction("deposit", amountCents, `Stripe deposit ${checkoutSessionId}`);
   record.credited = true;
-  writeJson(PENDING_FILE, pending);
+  await writeJson(PENDING_FILE, pending);
   return {
     credited: true,
     amountCents,

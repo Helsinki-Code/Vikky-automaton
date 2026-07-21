@@ -14,13 +14,13 @@ export default defineTool({
     amountCents: z.number().int().positive(),
   }),
   async execute({ childId, amountCents }) {
-    const child = listChildren().find((c) => c.id === childId);
+    const child = (await listChildren()).find((c) => c.id === childId);
     if (!child) return { funded: false, reason: `No child with id ${childId}.` };
-    const check = checkTransfer(amountCents);
+    const check = await checkTransfer(amountCents);
     if (!check.allowed) {
       return { funded: false, blockedBy: "treasury_policy", reason: check.reason, policy: TREASURY_POLICY };
     }
-    const txn = recordTransaction("transfer_out", -amountCents, `Funded child "${child.name}"`);
+    const txn = await recordTransaction("transfer_out", -amountCents, `Funded child "${child.name}"`);
     return { funded: true, childId, amountCents, newBalanceCents: txn.balanceAfterCents };
   },
 });

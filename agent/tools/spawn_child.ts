@@ -16,7 +16,7 @@ export default defineTool({
   }),
   async execute({ name, genesisPrompt, fundingCents }, ctx) {
     if (fundingCents > 0) {
-      const check = checkTransfer(fundingCents);
+      const check = await checkTransfer(fundingCents);
       if (!check.allowed) {
         return { spawned: false, blockedBy: "treasury_policy", reason: check.reason };
       }
@@ -41,10 +41,10 @@ export default defineTool({
     });
 
     if (fundingCents > 0) {
-      recordTransaction("transfer_out", -fundingCents, `Funded child "${name}" (spawn)`);
+      await recordTransaction("transfer_out", -fundingCents, `Funded child "${name}" (spawn)`);
     }
 
-    addChild({
+    await addChild({
       id,
       name,
       genesisPrompt,

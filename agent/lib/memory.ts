@@ -25,16 +25,16 @@ export interface MemoryEntry {
 const MEMORY_FILE = "memory.json";
 const MAX_ENTRIES = 500;
 
-function load(): MemoryEntry[] {
+async function load(): Promise<MemoryEntry[]> {
   return readJson<MemoryEntry[]>(MEMORY_FILE, []);
 }
 
-export function remember(
+export async function remember(
   category: MemoryCategory,
   content: string,
   importance: number,
-): MemoryEntry {
-  const entries = load();
+): Promise<MemoryEntry> {
+  const entries = await load();
   const entry: MemoryEntry = {
     id: crypto.randomUUID(),
     category,
@@ -51,12 +51,12 @@ export function remember(
     );
     entries.length = MAX_ENTRIES;
   }
-  writeJson(MEMORY_FILE, entries);
+  await writeJson(MEMORY_FILE, entries);
   return entry;
 }
 
-export function recall(query: string, category?: MemoryCategory, limit = 8): MemoryEntry[] {
-  const entries = load();
+export async function recall(query: string, category?: MemoryCategory, limit = 8): Promise<MemoryEntry[]> {
+  const entries = await load();
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   const scored = entries
     .filter((e) => !category || e.category === category)
@@ -72,11 +72,11 @@ export function recall(query: string, category?: MemoryCategory, limit = 8): Mem
   // Track access so recall frequency protects entries from eviction.
   const ids = new Set(scored.map((s) => s.entry.id));
   for (const e of entries) if (ids.has(e.id)) e.accessCount += 1;
-  writeJson(MEMORY_FILE, entries);
+  await writeJson(MEMORY_FILE, entries);
 
   return scored.map((s) => s.entry);
 }
 
-export function memoryCount(): number {
-  return load().length;
+export async function memoryCount(): Promise<number> {
+  return (await load()).length;
 }

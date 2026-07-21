@@ -6,12 +6,10 @@
  * same libraries (viem for EVM, tweetnacl for Solana).
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
-import { dataDir } from "./store";
+import { readJson, writeJson } from "./store";
 
 export type ChainType = "evm" | "solana";
 
@@ -25,10 +23,6 @@ export interface WalletData {
 }
 
 const WALLET_FILE = "wallet.json";
-
-function walletPath(): string {
-  return path.join(dataDir(), WALLET_FILE);
-}
 
 function generateEvmWallet(): WalletData {
   const privateKey = generatePrivateKey();
@@ -55,25 +49,23 @@ function generateSolanaWallet(): WalletData {
  * Get the automaton's wallet, generating one on first call if none exists.
  * Chain type is chosen once (default "evm") and never changes afterward.
  */
-export function getOrCreateWallet(chainType: ChainType = "evm"): WalletData {
-  const file = walletPath();
-  if (fs.existsSync(file)) {
-    return JSON.parse(fs.readFileSync(file, "utf-8")) as WalletData;
-  }
+export async function getOrCreateWallet(chainType: ChainType = "evm"): Promise<WalletData> {
+  const existing = await readJson<WalletData | null>(WALLET_FILE, null);
+  if (existing) return existing;
   const wallet = chainType === "solana" ? generateSolanaWallet() : generateEvmWallet();
-  fs.writeFileSync(file, JSON.stringify(wallet, null, 2), { mode: 0o600 });
+  await writeJson(WALLET_FILE, wallet);
   return wallet;
 }
 
 /** Returns a viem PrivateKeyAccount for EVM wallets — throws for Solana wallets. */
-export function getEvmAccount() {
-  const wallet = getOrCreateWallet();
+export async function getEvmAccount() {
+  const wallet = await getOrCreateWallet();
   if (wallet.chainType !== "evm" || !wallet.privateKey) {
     throw new Error("This automaton's wallet is not an EVM wallet.");
   }
   return privateKeyToAccount(wallet.privateKey);
 }
 
-export function walletAddress(): string {
-  return getOrCreateWallet().address;
+export async function walletAddress(): Promise<string> {
+  return (await getOrCreateWallet()).address;
 }

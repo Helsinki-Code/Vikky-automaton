@@ -9,7 +9,7 @@ export default defineTool({
     message: z.string().min(1),
   }),
   async execute({ childId, message }) {
-    const child = listChildren().find((c) => c.id === childId);
+    const child = (await listChildren()).find((c) => c.id === childId);
     if (!child) return { sent: false, reason: `No child with id ${childId}.` };
     if (!child.deploymentUrl) return { sent: false, reason: "Child has no recorded deployment URL." };
 

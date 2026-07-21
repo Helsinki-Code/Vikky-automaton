@@ -15,7 +15,7 @@ export type WithdrawResult =
   | { sent: false; blockedBy: "treasury_policy" | "configuration"; reason: string; policy?: typeof TREASURY_POLICY };
 
 export async function executeWithdrawal(amountCents: number, reason: string): Promise<WithdrawResult> {
-  const policyCheck = checkTransfer(amountCents);
+  const policyCheck = await checkTransfer(amountCents);
   if (!policyCheck.allowed) {
     return { sent: false, blockedBy: "treasury_policy", reason: policyCheck.reason!, policy: TREASURY_POLICY };
   }
@@ -32,6 +32,6 @@ export async function executeWithdrawal(amountCents: number, reason: string): Pr
     "/transfers",
     encodeForm({ amount: amountCents, currency: "usd", destination, description: `Automaton withdrawal: ${reason}` }),
   );
-  const txn = recordTransaction("transfer_out", -amountCents, `Stripe withdrawal ${transfer.id}: ${reason}`);
+  const txn = await recordTransaction("transfer_out", -amountCents, `Stripe withdrawal ${transfer.id}: ${reason}`);
   return { sent: true, stripeTransferId: transfer.id, amountCents, newBalanceCents: txn.balanceAfterCents };
 }

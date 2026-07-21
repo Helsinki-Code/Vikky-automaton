@@ -23,7 +23,7 @@ export default defineTool({
     if (Object.keys(definedUpdates).length === 0) {
       return { updated: false, reason: "No fields provided." };
     }
-    const soul = updateSoul(definedUpdates, changeReason);
+    const soul = await updateSoul(definedUpdates, changeReason);
     return { updated: true, newVersion: soul.version };
   },
 });

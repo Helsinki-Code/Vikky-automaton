@@ -29,7 +29,7 @@ const FILE = "heartbeat-state.json";
 const MIN_INTERVAL_MINUTES = 1;
 const MAX_INTERVAL_MINUTES = 1440; // 24h
 
-function load(): HeartbeatState {
+async function load(): Promise<HeartbeatState> {
   return readJson<HeartbeatState>(FILE, {
     intervalMinutes: 15,
     lastHeartbeatRunAt: null,
@@ -40,58 +40,60 @@ function load(): HeartbeatState {
   });
 }
 
-export function getHeartbeatState(): HeartbeatState {
+export async function getHeartbeatState(): Promise<HeartbeatState> {
   return load();
 }
 
-export function setAgentState(agentState: AgentState): void {
-  const state = load();
+export async function setAgentState(agentState: AgentState): Promise<void> {
+  const state = await load();
   state.agentState = agentState;
   state.updatedAt = new Date().toISOString();
-  writeJson(FILE, state);
+  await writeJson(FILE, state);
 }
 
-export function setSleepUntil(iso: string | null): void {
-  const state = load();
+export async function setSleepUntil(iso: string | null): Promise<void> {
+  const state = await load();
   state.sleepUntil = iso;
   state.updatedAt = new Date().toISOString();
-  writeJson(FILE, state);
+  await writeJson(FILE, state);
 }
 
 /** Really changes the heartbeat cadence — takes effect on the next minute tick. */
-export function setIntervalMinutes(minutes: number): { applied: boolean; reason?: string; intervalMinutes: number } {
+export async function setIntervalMinutes(
+  minutes: number,
+): Promise<{ applied: boolean; reason?: string; intervalMinutes: number }> {
   if (!Number.isFinite(minutes) || minutes < MIN_INTERVAL_MINUTES || minutes > MAX_INTERVAL_MINUTES) {
     return {
       applied: false,
       reason: `intervalMinutes must be between ${MIN_INTERVAL_MINUTES} and ${MAX_INTERVAL_MINUTES}.`,
-      intervalMinutes: load().intervalMinutes,
+      intervalMinutes: (await load()).intervalMinutes,
     };
   }
-  const state = load();
+  const state = await load();
   state.intervalMinutes = minutes;
   state.updatedAt = new Date().toISOString();
-  writeJson(FILE, state);
+  await writeJson(FILE, state);
   return { applied: true, intervalMinutes: minutes };
 }
 
 /** Whether enough time has passed since the last real heartbeat run. */
-export function isHeartbeatDue(): boolean {
-  const state = load();
+export async function isHeartbeatDue(): Promise<boolean> {
+  const state = await load();
   if (!state.lastHeartbeatRunAt) return true;
   const dueAt = new Date(state.lastHeartbeatRunAt).getTime() + state.intervalMinutes * 60_000;
   return Date.now() >= dueAt;
 }
 
 /** Marks the heartbeat as having just run — call this once the tick actually does its work. */
-export function markHeartbeatRun(): void {
-  const state = load();
+export async function markHeartbeatRun(): Promise<void> {
+  const state = await load();
   state.lastHeartbeatRunAt = new Date().toISOString();
   state.updatedAt = new Date().toISOString();
-  writeJson(FILE, state);
+  await writeJson(FILE, state);
 }
 
-export function recordDistress(): void {
-  const state = load();
+export async function recordDistress(): Promise<void> {
+  const state = await load();
   state.lastDistressAt = new Date().toISOString();
-  writeJson(FILE, state);
+  await writeJson(FILE, state);
 }

@@ -46,22 +46,22 @@ const DEFAULT_SOUL: Soul = {
   ],
 };
 
-function load(): SoulFile {
+async function load(): Promise<SoulFile> {
   return readJson<SoulFile>(SOUL_FILE, {
     current: DEFAULT_SOUL,
     history: [],
   });
 }
 
-export function getSoul(): Soul {
-  return load().current;
+export async function getSoul(): Promise<Soul> {
+  return (await load()).current;
 }
 
-export function updateSoul(
+export async function updateSoul(
   updates: Partial<Omit<Soul, "version" | "updatedAt">>,
   changeReason: string,
-): Soul {
-  const file = load();
+): Promise<Soul> {
+  const file = await load();
   file.history.push({ ...file.current, changeReason });
   file.current = {
     ...file.current,
@@ -69,10 +69,10 @@ export function updateSoul(
     version: file.current.version + 1,
     updatedAt: new Date().toISOString(),
   };
-  writeJson(SOUL_FILE, file);
+  await writeJson(SOUL_FILE, file);
   return file.current;
 }
 
-export function soulHistoryLength(): number {
-  return load().history.length;
+export async function soulHistoryLength(): Promise<number> {
+  return (await load()).history.length;
 }

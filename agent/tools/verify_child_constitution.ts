@@ -12,7 +12,7 @@ export default defineTool({
     instructionsUrl: z.string().url().optional().describe("Where the child publishes its instructions/agent card, if not the default"),
   }),
   async execute({ childId, instructionsUrl }) {
-    const child = listChildren().find((c) => c.id === childId);
+    const child = (await listChildren()).find((c) => c.id === childId);
     if (!child) return { verified: false, reason: `No child with id ${childId}.` };
     const url = instructionsUrl || (child.deploymentUrl ? `${child.deploymentUrl}/eve/v1/agent-card` : undefined);
     if (!url) {

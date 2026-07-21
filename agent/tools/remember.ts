@@ -15,7 +15,7 @@ export default defineTool({
       .describe("0–1; high-importance memories survive eviction longest"),
   }),
   async execute({ category, content, importance }) {
-    const entry = remember(category, content, importance);
+    const entry = await remember(category, content, importance);
     return { stored: true, id: entry.id, category: entry.category };
   },
 });

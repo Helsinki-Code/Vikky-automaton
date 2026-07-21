@@ -4,10 +4,10 @@ import { getRegistryEntry } from "../../../agent/lib/registry";
 
 /** Presence-only — never returns the actual secret values to the browser. */
 export async function GET() {
-  const wallet = getOrCreateWallet();
+  const wallet = await getOrCreateWallet();
   return NextResponse.json({
     wallet: { address: wallet.address, chainType: wallet.chainType, createdAt: wallet.createdAt },
-    onChainRegistry: getRegistryEntry() ?? null,
+    onChainRegistry: (await getRegistryEntry()) ?? null,
     integrations: {
       routeAuth: !!(process.env.ROUTE_AUTH_USERNAME && process.env.ROUTE_AUTH_PASSWORD),
       stripe: !!process.env.STRIPE_SECRET_KEY,

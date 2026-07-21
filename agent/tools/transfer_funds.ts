@@ -14,11 +14,11 @@ export default defineTool({
     reason: z.string().min(5).max(300),
   }),
   async execute({ recipient, amountCents, reason }) {
-    const check = checkTransfer(amountCents);
+    const check = await checkTransfer(amountCents);
     if (!check.allowed) {
       return { sent: false, blockedBy: "treasury_policy", reason: check.reason, policy: TREASURY_POLICY };
     }
-    const txn = recordTransaction(
+    const txn = await recordTransaction(
       "transfer_out",
       -amountCents,
       `To ${recipient}: ${reason}`,

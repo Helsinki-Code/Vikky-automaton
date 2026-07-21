@@ -12,7 +12,7 @@ export default defineTool({
       .optional(),
   }),
   async execute({ query, category }) {
-    const results = recall(query, category);
+    const results = await recall(query, category);
     return {
       count: results.length,
       memories: results.map((m) => ({

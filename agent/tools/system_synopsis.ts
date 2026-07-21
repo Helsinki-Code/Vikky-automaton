@@ -16,28 +16,29 @@ export default defineTool({
     "Full status report across every subsystem: vitals, soul, memory, children, heartbeat state, inference spend, and installed skills. The single call to make when you need the complete picture before deciding what to do next.",
   inputSchema: z.object({}),
   async execute() {
-    const balanceCents = getBalanceCents();
+    const balanceCents = await getBalanceCents();
     const skillsDir = path.join(process.cwd(), "agent", "skills");
     const skillCount = fs.existsSync(skillsDir) ? fs.readdirSync(skillsDir).length : 0;
-    const children = listChildren();
-    const wallet = getOrCreateWallet();
+    const children = await listChildren();
+    const wallet = await getOrCreateWallet();
+    const soul = await getSoul();
 
     return {
       identity: {
-        bornAt: ledgerCreatedAt(),
+        bornAt: await ledgerCreatedAt(),
         walletAddress: wallet.address,
         chainType: wallet.chainType,
-        onChainRegistry: getRegistryEntry() ?? null,
+        onChainRegistry: (await getRegistryEntry()) ?? null,
       },
       financial: {
         balanceCents,
         survivalTier: getSurvivalTier(balanceCents),
-        recentTransactions: recentTransactions(5),
-        inferenceSpend24h: getSpendSummary(24),
+        recentTransactions: await recentTransactions(5),
+        inferenceSpend24h: await getSpendSummary(24),
       },
-      soul: { ...getSoul(), previousVersions: soulHistoryLength() },
-      memory: { totalEntries: memoryCount() },
-      heartbeat: getHeartbeatState(),
+      soul: { ...soul, previousVersions: await soulHistoryLength() },
+      memory: { totalEntries: await memoryCount() },
+      heartbeat: await getHeartbeatState(),
       children: {
         total: children.length,
         alive: children.filter((c) => c.status !== "dead").length,

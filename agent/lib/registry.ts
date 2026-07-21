@@ -26,30 +26,30 @@ export interface Child {
 
 const CHILDREN_FILE = "children.json";
 
-export function listChildren(): Child[] {
+export async function listChildren(): Promise<Child[]> {
   return readJson<Child[]>(CHILDREN_FILE, []);
 }
 
-export function addChild(child: Child): void {
-  const children = listChildren();
+export async function addChild(child: Child): Promise<void> {
+  const children = await listChildren();
   children.push(child);
-  writeJson(CHILDREN_FILE, children);
+  await writeJson(CHILDREN_FILE, children);
 }
 
-export function updateChildStatus(id: string, status: ChildStatus): Child | undefined {
-  const children = listChildren();
+export async function updateChildStatus(id: string, status: ChildStatus): Promise<Child | undefined> {
+  const children = await listChildren();
   const child = children.find((c) => c.id === id);
   if (!child) return undefined;
   child.status = status;
   child.lastChecked = new Date().toISOString();
-  writeJson(CHILDREN_FILE, children);
+  await writeJson(CHILDREN_FILE, children);
   return child;
 }
 
-export function pruneDeadChildren(): number {
-  const children = listChildren();
+export async function pruneDeadChildren(): Promise<number> {
+  const children = await listChildren();
   const alive = children.filter((c) => c.status !== "dead");
-  writeJson(CHILDREN_FILE, alive);
+  await writeJson(CHILDREN_FILE, alive);
   return children.length - alive.length;
 }
 
@@ -65,12 +65,12 @@ export interface ReputationEntry {
 
 const REPUTATION_FILE = "reputation.json";
 
-export function listReputation(toAgent?: string): ReputationEntry[] {
-  const all = readJson<ReputationEntry[]>(REPUTATION_FILE, []);
+export async function listReputation(toAgent?: string): Promise<ReputationEntry[]> {
+  const all = await readJson<ReputationEntry[]>(REPUTATION_FILE, []);
   return toAgent ? all.filter((r) => r.toAgent === toAgent) : all;
 }
 
-export function giveFeedback(toAgent: string, score: number, comment: string): ReputationEntry {
+export async function giveFeedback(toAgent: string, score: number, comment: string): Promise<ReputationEntry> {
   const entry: ReputationEntry = {
     id: crypto.randomUUID(),
     toAgent,
@@ -78,9 +78,9 @@ export function giveFeedback(toAgent: string, score: number, comment: string): R
     comment,
     timestamp: new Date().toISOString(),
   };
-  const all = readJson<ReputationEntry[]>(REPUTATION_FILE, []);
+  const all = await readJson<ReputationEntry[]>(REPUTATION_FILE, []);
   all.push(entry);
-  writeJson(REPUTATION_FILE, all);
+  await writeJson(REPUTATION_FILE, all);
   return entry;
 }
 
@@ -101,30 +101,30 @@ export interface RegistryEntry {
   registeredAt: string;
 }
 
-export function getAgentCard(): AgentCard | undefined {
+export async function getAgentCard(): Promise<AgentCard | undefined> {
   return readJson<AgentCard | undefined>("agent-card.json", undefined);
 }
 
-export function setAgentCard(card: AgentCard): void {
-  writeJson("agent-card.json", card);
+export async function setAgentCard(card: AgentCard): Promise<void> {
+  await writeJson("agent-card.json", card);
 }
 
-export function getRegistryEntry(): RegistryEntry | undefined {
+export async function getRegistryEntry(): Promise<RegistryEntry | undefined> {
   return readJson<RegistryEntry | undefined>("registry-entry.json", undefined);
 }
 
-export function setRegistryEntry(entry: RegistryEntry): void {
-  writeJson("registry-entry.json", entry);
+export async function setRegistryEntry(entry: RegistryEntry): Promise<void> {
+  await writeJson("registry-entry.json", entry);
 }
 
 // ─── Genesis prompt evolution notes ──────────────────────────────
 
-export function getGenesisNotes(): string[] {
+export async function getGenesisNotes(): Promise<string[]> {
   return readJson<string[]>("genesis-notes.json", []);
 }
 
-export function addGenesisNote(note: string): void {
-  const notes = getGenesisNotes();
+export async function addGenesisNote(note: string): Promise<void> {
+  const notes = await getGenesisNotes();
   notes.push(`${new Date().toISOString()}: ${note}`);
-  writeJson("genesis-notes.json", notes);
+  await writeJson("genesis-notes.json", notes);
 }

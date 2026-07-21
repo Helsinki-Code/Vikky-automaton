@@ -18,12 +18,13 @@ import { chargeUpkeepIfDue } from "../lib/upkeep";
  */
 export default defineSchedule({
   cron: "* * * * *",
-  run({ waitUntil }) {
-    if (!isHeartbeatDue()) return;
+  async run({ waitUntil }) {
+    if (!(await isHeartbeatDue())) return;
     waitUntil(
       (async () => {
-        markHeartbeatRun();
-        chargeUpkeepIfDue(`Dynamic dispatcher tick (every ${getHeartbeatState().intervalMinutes}m)`);
+        await markHeartbeatRun();
+        const state = await getHeartbeatState();
+        await chargeUpkeepIfDue(`Dynamic dispatcher tick (every ${state.intervalMinutes}m)`);
       })(),
     );
   },

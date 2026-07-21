@@ -12,12 +12,12 @@ export default defineTool({
     deploymentUrl: z.string().url(),
   }),
   async execute({ childId, deploymentUrl }) {
-    const children = listChildren();
+    const children = await listChildren();
     const child = children.find((c) => c.id === childId);
     if (!child) return { started: false, reason: `No child with id ${childId}.` };
     child.deploymentUrl = deploymentUrl;
-    writeJson("children.json", children satisfies Child[]);
-    updateChildStatus(childId, "running");
+    await writeJson("children.json", children satisfies Child[]);
+    await updateChildStatus(childId, "running");
     return { started: true, childId, deploymentUrl };
   },
 });

@@ -6,7 +6,7 @@ export default defineTool({
   description: "List all child automatons you've spawned, with status and funding history.",
   inputSchema: z.object({}),
   async execute() {
-    const children = listChildren();
+    const children = await listChildren();
     return {
       count: children.length,
       alive: children.filter((c) => c.status !== "dead").length,

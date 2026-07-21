@@ -15,7 +15,7 @@ export default defineAgent({
   model: defineDynamic({
     fallback: openai("gpt-5.2"),
     events: {
-      "step.started": () => resolveModel(getSelectedModel()),
+      "step.started": async () => resolveModel(await getSelectedModel()),
     },
   }),
   reasoning: "medium",

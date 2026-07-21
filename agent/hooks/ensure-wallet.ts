@@ -9,7 +9,7 @@ import { getOrCreateWallet } from "../lib/wallet";
 export default defineHook({
   events: {
     async "session.started"() {
-      getOrCreateWallet();
+      await getOrCreateWallet();
     },
   },
 });

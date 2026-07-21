@@ -13,7 +13,7 @@ export default defineTool({
     note: z.string().max(200).optional(),
   }),
   async execute({ amountCents, note }) {
-    const txn = recordTransaction(
+    const txn = await recordTransaction(
       "deposit",
       amountCents,
       note || "Creator deposit",

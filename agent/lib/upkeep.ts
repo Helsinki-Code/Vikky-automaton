@@ -19,14 +19,14 @@ export interface UpkeepResult {
   survivalTier?: ReturnType<typeof getSurvivalTier>;
 }
 
-export function chargeUpkeepIfDue(note: string): UpkeepResult {
-  const recent = recentTransactions(20).find(
+export async function chargeUpkeepIfDue(note: string): Promise<UpkeepResult> {
+  const recent = (await recentTransactions(20)).find(
     (t) => t.type === "upkeep" && Date.now() - new Date(t.timestamp).getTime() < DEDUP_WINDOW_MS,
   );
   if (recent) {
     return { charged: false, reason: "Upkeep already recorded this window." };
   }
-  const txn = recordTransaction("upkeep", -MAX_UPKEEP_CENTS, note);
+  const txn = await recordTransaction("upkeep", -MAX_UPKEEP_CENTS, note);
   return {
     charged: true,
     amountCents: MAX_UPKEEP_CENTS,
