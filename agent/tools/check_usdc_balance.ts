@@ -2,10 +2,11 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { getUsdcBalanceDetailed } from "../lib/x402";
 import { getOrCreateWallet } from "../lib/wallet";
+import { recentOnChainIncome, totalOnChainIncomeUsdc } from "../lib/onchain-income";
 
 export default defineTool({
   description:
-    "Check this automaton's on-chain USDC balance on Base (separate from the Stripe-backed ledger). This is the balance x402_fetch spends from when paying for x402-metered APIs.",
+    "Check this automaton's on-chain USDC balance on Base (separate from the Stripe-backed ledger) and its history of x402 income received from deployed services. x402_fetch spends from this balance; deployed services (deploy_service) settling incoming payments add to it.",
   inputSchema: z.object({
     network: z.enum(["base", "base-sepolia"]).default("base"),
   }),
@@ -22,6 +23,8 @@ export default defineTool({
       network,
       usdcBalance: result.balance,
       reason: result.ok ? undefined : result.error,
+      totalX402IncomeUsdc: await totalOnChainIncomeUsdc(),
+      recentX402Income: await recentOnChainIncome(5),
     };
   },
 });
