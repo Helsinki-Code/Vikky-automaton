@@ -11,7 +11,7 @@ export default defineTool({
     intervalMinutes: z.number().int().min(1).max(1440).describe("New cadence for the mechanical upkeep tick, in minutes"),
   }),
   async execute({ intervalMinutes }) {
-    const result = setIntervalMinutes(intervalMinutes);
-    return { ...result, current: getHeartbeatState() };
+    const result = await setIntervalMinutes(intervalMinutes);
+    return { ...result, current: await getHeartbeatState() };
   },
 });

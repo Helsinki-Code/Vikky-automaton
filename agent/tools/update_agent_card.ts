@@ -12,7 +12,7 @@ export default defineTool({
     active: z.boolean().default(true),
   }),
   async execute({ name, description, services, active }) {
-    setAgentCard({ name, description, services, active });
-    return { updated: true, card: getAgentCard() };
+    await setAgentCard({ name, description, services, active });
+    return { updated: true, card: await getAgentCard() };
   },
 });

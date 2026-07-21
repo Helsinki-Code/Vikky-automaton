@@ -10,8 +10,8 @@ export default defineTool({
     reason: z.string().max(200).optional(),
   }),
   async execute({ untilIso, reason }) {
-    setAgentState("sleeping");
-    setSleepUntil(untilIso);
+    await setAgentState("sleeping");
+    await setSleepUntil(untilIso);
     return { sleeping: true, until: untilIso, reason };
   },
 });

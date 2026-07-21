@@ -8,7 +8,7 @@ export default defineTool({
   approval: once(),
   inputSchema: z.object({}),
   async execute() {
-    const removed = pruneDeadChildren();
+    const removed = await pruneDeadChildren();
     return { removed };
   },
 });

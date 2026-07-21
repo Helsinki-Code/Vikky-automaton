@@ -10,7 +10,7 @@ export default defineTool({
     comment: z.string().min(1).max(500),
   }),
   async execute({ toAgent, score, comment }) {
-    const entry = giveFeedback(toAgent, score, comment);
+    const entry = await giveFeedback(toAgent, score, comment);
     return { recorded: true, entry };
   },
 });
