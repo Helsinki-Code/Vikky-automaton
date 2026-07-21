@@ -13,7 +13,6 @@ export const TREASURY_POLICY = {
   maxSingleTransferCents: 5_000, // $50
   maxDailyTransferCents: 25_000, // $250
   minimumReserveCents: 100, // keep $1 alive at all times
-  maxX402PaymentCents: 100, // $1 per x402 micropayment, hard cap
 } as const;
 
 export async function checkTransfer(amountCents: number): Promise<{ allowed: boolean; reason?: string }> {

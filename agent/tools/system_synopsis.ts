@@ -8,7 +8,6 @@ import { getHeartbeatState } from "../lib/heartbeat-state";
 import { getSpendSummary } from "../lib/models";
 import { getOrCreateWallet } from "../lib/wallet";
 import { getRegistryEntry } from "../lib/registry";
-import { totalOnChainIncomeUsdc, recentOnChainIncome } from "../lib/onchain-income";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -36,8 +35,6 @@ export default defineTool({
         survivalTier: getSurvivalTier(balanceCents),
         recentTransactions: await recentTransactions(5),
         inferenceSpend24h: await getSpendSummary(24),
-        onChainIncomeUsdc: await totalOnChainIncomeUsdc(),
-        recentOnChainIncome: await recentOnChainIncome(5),
       },
       soul: { ...soul, previousVersions: await soulHistoryLength() },
       memory: { totalEntries: await memoryCount() },

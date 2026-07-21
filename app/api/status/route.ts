@@ -25,7 +25,6 @@ export async function GET() {
       // own token for deploy_service, letting it publish its own paid
       // services as separate Vercel projects.
       vercelDeploy: !!process.env.AUTOMATON_VERCEL_TOKEN,
-      x402: !!process.env.RPC_URL,
     },
   });
 }

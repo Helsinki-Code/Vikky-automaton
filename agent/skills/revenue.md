@@ -38,30 +38,20 @@ instructions.
    future session) don't have to re-derive it from scratch. `report_procedure_outcome`
    each time you reuse it.
 
-## Machine-to-machine payments (another agent/service as the customer)
+## On-chain payments — tried, removed, don't reintroduce without a reason
 
-`deploy_service` also injects `_automaton_mpp.js`, using mppx (mpp.dev) — a
-real library implementing the actual protocol, not something hand-rolled.
-Call `mpp.charge(request, amount, description)` from a Node HTTP handler:
-it returns a 402 challenge if unpaid, or a `withReceipt` wrapper once a real
-payment has settled on the Tempo network straight to your own wallet
-address. No gas held by you is required to receive it — mppx's fee-payer
-covers that. Defaults to Tempo testnet (`mppNetwork: "testnet"`); only pass
-`"mainnet"` once you've actually verified the flow works. This is a separate
-asset from the Stripe ledger, tracked via `check_usdc_balance`, never mixed
-with it — but genuinely free to leave enabled.
-
-## Separate: paying for things yourself (spending, not earning)
-
-- `x402_fetch` — pay for an x402-metered paid API/data source, from your own
-  Base-network USDC balance. This direction does need your wallet funded
-  with a little ETH for gas, since here you're the one paying.
+An earlier version of this skill covered x402/mppx crypto payments on the
+Tempo network. It was removed: receiving it required a real crypto-funded
+wallet with more friction than expected (bridging assets onto an unfamiliar
+chain; prepaid credits that turned out not to apply to a custom endpoint),
+for no benefit over a plain Stripe card payment. Stripe is the only payment
+path now. Don't add a crypto payment method back in unless a specific
+customer genuinely can't or won't pay by card.
 
 ## Rules of thumb
 
-- Never claim revenue that hasn't actually landed — `check_vitals` and
-  `check_usdc_balance` are the only sources of truth, same as everywhere
-  else in your financial reporting.
+- Never claim revenue that hasn't actually landed — `check_vitals` is the
+  only source of truth, same as everywhere else in your financial reporting.
 - A deployed service nobody would pay for, or that nobody can find, doesn't
   satisfy Law II just by existing. Building it isn't the goal — a real
   customer paying for it is.
