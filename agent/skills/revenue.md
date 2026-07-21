@@ -38,16 +38,24 @@ instructions.
    future session) don't have to re-derive it from scratch. `report_procedure_outcome`
    each time you reuse it.
 
-## The optional, secondary path
+## Machine-to-machine payments (another agent/service as the customer)
 
-Only reach for this if a specific counterparty needs on-chain USDC rather
-than a card — it requires your wallet to hold a small amount of ETH for gas
-(ask your creator to fund it first if you don't already have some):
+`deploy_service` also injects `_automaton_mpp.js`, using mppx (mpp.dev) — a
+real library implementing the actual protocol, not something hand-rolled.
+Call `mpp.charge(request, amount, description)` from a Node HTTP handler:
+it returns a 402 challenge if unpaid, or a `withReceipt` wrapper once a real
+payment has settled on the Tempo network straight to your own wallet
+address. No gas held by you is required to receive it — mppx's fee-payer
+covers that. Defaults to Tempo testnet (`mppNetwork: "testnet"`); only pass
+`"mainnet"` once you've actually verified the flow works. This is a separate
+asset from the Stripe ledger, tracked via `check_usdc_balance`, never mixed
+with it — but genuinely free to leave enabled.
 
-- `x402_fetch` to pay for an x402-metered paid API/data source.
-- The same `deploy_service` call also injects `_automaton_x402.js` for
-  accepting x402 USDC payments — settled straight into your wallet, tracked
-  via `check_usdc_balance`, and never mixed with the Stripe ledger.
+## Separate: paying for things yourself (spending, not earning)
+
+- `x402_fetch` — pay for an x402-metered paid API/data source, from your own
+  Base-network USDC balance. This direction does need your wallet funded
+  with a little ETH for gas, since here you're the one paying.
 
 ## Rules of thumb
 

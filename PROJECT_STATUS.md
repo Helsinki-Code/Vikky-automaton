@@ -162,12 +162,21 @@ not just track money it's given:
   - `_automaton_stripe.js` — **primary path.** Charges a real customer via
     Stripe Checkout (`agent/lib/deposits.ts` reused), proceeds credited into
     the same ledger `check_vitals` reports. No crypto, no gas.
-  - `_automaton_x402.js` — **secondary, optional.** Accepts on-chain USDC via
-    x402, settled by `/api/x402/settle` (this app runtime broadcasts the
-    payer's signed EIP-3009 authorization itself — no third-party
-    facilitator), tracked in `agent/lib/onchain-income.ts`, kept strictly
-    separate from the Stripe ledger.
-  - `x402_fetch` / `check_usdc_balance` — the paying-for-APIs half of x402.
+  - `_automaton_mpp.js` — **secondary, machine-to-machine.** Real payments
+    via `mppx` (mpp.dev) — a real, spec-compliant library, not hand-rolled —
+    settled on the Tempo network straight to the automaton's own wallet
+    address. No gas held by the automaton required (mppx's fee-payer covers
+    it). `app/api/mpp/report` is purely for dashboard visibility (the
+    payment already settled peer-to-peer by the time it's called); tracked
+    in `agent/lib/onchain-income.ts`, kept strictly separate from the Stripe
+    ledger. Defaults to Tempo testnet; `mppNetwork: "mainnet"` for real money.
+    **Replaces an earlier from-scratch EIP-3009-broadcast implementation**
+    that required the automaton to hold its own ETH for gas — discovered to
+    be unnecessary once Stripe/mpp.dev's real docs surfaced this library.
+  - `x402_fetch` / `check_usdc_balance` — a separate, orthogonal capability:
+    the automaton *paying* for an x402-metered API itself (Base network,
+    does need the automaton's own wallet funded with ETH for gas, since
+    here it's the payer, not the recipient).
 - **Goals & procedures** — `create_goal`/`list_goals`/`complete_goal`/
   `cancel_goal`/`get_plan`/`update_goal_plan` (durable, one active goal at a
   time, no orchestrator — the agent authors its own plan) and
@@ -231,7 +240,8 @@ manual deployment as the permanent design.
 | Real HTTP route auth | `ROUTE_AUTH_USERNAME`, `ROUTE_AUTH_PASSWORD` | ✅ configured |
 | Service deploys (`deploy_service`) | `AUTOMATON_VERCEL_TOKEN` (+ optional `AUTOMATON_VERCEL_TEAM_ID`) | ✅ configured |
 | ERC-8004 on-chain identity | `RPC_URL`, `ERC8004_REGISTRY_ADDRESS` | 🟡 not configured — needs a funded deployer wallet (contracts/README.md); code path is fully wired and verified (compile + typecheck), only the on-chain deploy step is outstanding |
-| x402 on-chain payments (secondary revenue path) | `RPC_URL` (same var as ERC-8004) | 🟡 not configured — optional; Stripe is the primary earning path and needs none of this |
+| mppx machine-to-machine payments (`_automaton_mpp.js`) | none — wallet + secret auto-generated, no env var needed | ✅ ready by default; defaults to Tempo testnet until `mppNetwork: "mainnet"` is explicitly requested |
+| x402_fetch (automaton *paying* for APIs, separate from the above) | `RPC_URL` | 🟡 not configured — optional; Stripe is the primary earning path and needs none of this |
 
 ### 3.3 🟢 Nice-to-haves, not blockers
 
