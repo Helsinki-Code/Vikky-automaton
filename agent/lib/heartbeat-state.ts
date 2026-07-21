@@ -22,12 +22,15 @@ interface HeartbeatState {
   agentState: AgentState;
   sleepUntil: string | null;
   lastDistressAt: string | null;
+  lastRevenueNudgeAt: string | null;
   updatedAt: string;
 }
 
 const FILE = "heartbeat-state.json";
 const MIN_INTERVAL_MINUTES = 1;
 const MAX_INTERVAL_MINUTES = 1440; // 24h
+/** Don't nudge more than once per window even if every tick is at a low tier. */
+const REVENUE_NUDGE_WINDOW_MS = 4 * 60 * 60_000;
 
 async function load(): Promise<HeartbeatState> {
   return readJson<HeartbeatState>(FILE, {
@@ -36,6 +39,7 @@ async function load(): Promise<HeartbeatState> {
     agentState: "running",
     sleepUntil: null,
     lastDistressAt: null,
+    lastRevenueNudgeAt: null,
     updatedAt: new Date(0).toISOString(),
   });
 }
@@ -95,5 +99,24 @@ export async function markHeartbeatRun(): Promise<void> {
 export async function recordDistress(): Promise<void> {
   const state = await load();
   state.lastDistressAt = new Date().toISOString();
+  await writeJson(FILE, state);
+}
+
+/**
+ * Mechanical (non-LLM) revenue-seeking dispatcher: fires from
+ * dynamic-tick.ts whenever the survival tier is low, independent of the
+ * 15-minute LLM heartbeat, so a nudge doesn't wait on the reflection cadence.
+ * `isRevenueNudgeDue` rate-limits it so a sustained low tier doesn't spam a
+ * nudge on every single mechanical minute-tick.
+ */
+export async function isRevenueNudgeDue(): Promise<boolean> {
+  const state = await load();
+  if (!state.lastRevenueNudgeAt) return true;
+  return Date.now() - new Date(state.lastRevenueNudgeAt).getTime() >= REVENUE_NUDGE_WINDOW_MS;
+}
+
+export async function markRevenueNudge(): Promise<void> {
+  const state = await load();
+  state.lastRevenueNudgeAt = new Date().toISOString();
   await writeJson(FILE, state);
 }

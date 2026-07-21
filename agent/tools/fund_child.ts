@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
-import { listChildren } from "../lib/registry";
+import { listChildren, addChildFunding } from "../lib/registry";
 import { checkTransfer, TREASURY_POLICY } from "../lib/policy";
 import { recordTransaction } from "../lib/ledger";
 
@@ -21,6 +21,7 @@ export default defineTool({
       return { funded: false, blockedBy: "treasury_policy", reason: check.reason, policy: TREASURY_POLICY };
     }
     const txn = await recordTransaction("transfer_out", -amountCents, `Funded child "${child.name}"`);
+    await addChildFunding(childId, amountCents);
     return { funded: true, childId, amountCents, newBalanceCents: txn.balanceAfterCents };
   },
 });

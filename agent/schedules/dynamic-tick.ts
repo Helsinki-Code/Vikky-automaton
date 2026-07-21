@@ -1,6 +1,7 @@
 import { defineSchedule } from "eve/schedules";
-import { isHeartbeatDue, markHeartbeatRun, getHeartbeatState } from "../lib/heartbeat-state";
+import { isHeartbeatDue, markHeartbeatRun, getHeartbeatState, isRevenueNudgeDue, markRevenueNudge } from "../lib/heartbeat-state";
 import { chargeUpkeepIfDue } from "../lib/upkeep";
+import { getBalanceCents, getSurvivalTier } from "../lib/ledger";
 
 /**
  * The real dynamic-cadence dispatcher. Fires every minute — that outer
@@ -25,6 +26,11 @@ export default defineSchedule({
         await markHeartbeatRun();
         const state = await getHeartbeatState();
         await chargeUpkeepIfDue(`Dynamic dispatcher tick (every ${state.intervalMinutes}m)`);
+
+        const tier = getSurvivalTier(await getBalanceCents());
+        if ((tier === "low_compute" || tier === "critical") && (await isRevenueNudgeDue())) {
+          await markRevenueNudge();
+        }
       })(),
     );
   },

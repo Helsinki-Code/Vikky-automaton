@@ -142,44 +142,75 @@ bug described in 2.5 before it shipped.
 - **`app/layout.tsx`**, **`app/globals.css`** — shell and styling (dark theme, tier-colored badges, no external UI library).
 - **`package.json`** scripts repointed: `dev`/`build`/`start` now run Next.js (which boots eve internally per `withEve`); `dev:agent-only`/`build:agent-only` keep the bare `eve dev`/`eve build` path for agent-only iteration.
 - ✅ **Verified live, not just typechecked:** booted the real dashboard in a browser, clicked "Refresh status" — the sidebar populated with the actual ledger balance ($9.80), HIGH tier, soul version, and memory count straight from a live `system_synopsis` call. Then sent `transfer_funds` from the chat input, watched a real HITL approval card render with Yes/No buttons (not "approve"/"deny" — Eve's default confirmation options), clicked "Yes", and confirmed the tool actually executed: ledger genuinely debited from $9.80 → $9.70, exactly matching what the ledger file would show. Full browser → Next.js → eve → tool → real-state-mutation round trip confirmed end to end.
-- **Known limitation, not a bug:** the sidebar only re-parses vitals when `check_vitals`/`system_synopsis` is actually called in the conversation — it doesn't auto-poll after unrelated tool calls (like the transfer above), so it can show a stale balance until you ask again or hit "Refresh status". Fine for a first version; an auto-refresh-after-financial-tool-calls behavior would be a nice-to-have polish item.
+- **Known limitation, still true for the chat page specifically:** the sidebar only re-parses vitals when `check_vitals`/`system_synopsis` is actually called in the conversation — it doesn't auto-poll after unrelated tool calls, so it can show a stale balance until you ask again or hit "Refresh status". The Ledger/Settings/Children pages (2.14) now poll or refresh independently of chat, so this is scoped to the chat sidebar only.
 
 ### 2.13 Config / secrets currently set
 
-Only `OPENAI_API_KEY` is in `.env.local`. Everything else below is unset and
-its corresponding tools return honest "not configured" responses rather than
-faking success.
+See section 3.2 for the current per-integration status — this list has grown well past the original `OPENAI_API_KEY`-only state as Stripe, Vercel deploy, route auth, and others were wired up across sessions.
+
+### 2.14 Revenue path + enhancement round (added after 3.0's Blob fix)
+
+Triggered by an explicit ask for the automaton to actually be able to earn,
+not just track money it's given:
+
+- **`deploy_service`** — publishes a directory built in the sandbox as its
+  own real, public Vercel project (`agent/lib/vercel-deploy.ts`, REST API,
+  not the CLI, so the deploy token never touches the sandbox). Capped at
+  `MAX_ACTIVE_SERVICES` (5), supports `resumeDeploymentId` for a timed-out
+  poll, registers into `agent/lib/services.ts`, and auto-injects two helpers
+  into the deployed files:
+  - `_automaton_stripe.js` — **primary path.** Charges a real customer via
+    Stripe Checkout (`agent/lib/deposits.ts` reused), proceeds credited into
+    the same ledger `check_vitals` reports. No crypto, no gas.
+  - `_automaton_x402.js` — **secondary, optional.** Accepts on-chain USDC via
+    x402, settled by `/api/x402/settle` (this app runtime broadcasts the
+    payer's signed EIP-3009 authorization itself — no third-party
+    facilitator), tracked in `agent/lib/onchain-income.ts`, kept strictly
+    separate from the Stripe ledger.
+  - `x402_fetch` / `check_usdc_balance` — the paying-for-APIs half of x402.
+- **Goals & procedures** — `create_goal`/`list_goals`/`complete_goal`/
+  `cancel_goal`/`get_plan`/`update_goal_plan` (durable, one active goal at a
+  time, no orchestrator — the agent authors its own plan) and
+  `save_procedure`/`recall_procedure`/`report_procedure_outcome` (named,
+  success/failure-tracked, distinct from `remember`/`recall`).
+- **`search_task_marketplace`** — a real, public, no-key-required listings
+  feed (remoteok.com/api), for surfacing leads, not auto-applying.
+- **Mechanical revenue nudge** — `dynamic-tick.ts` (non-LLM) flags when the
+  survival tier is low; `check_vitals`'s `revenueFocusRecommended` field and
+  the **revenue** skill make it concrete for the LLM heartbeat.
+- **Telegram alerting** — `distress_signal` pages the creator directly;
+  `agent/hooks/alert-on-failures.ts` pages on repeated consecutive tool
+  failures (`action.result` hook, not polling).
+- **Dashboard** — Ledger page: deployed services + revenue, transaction
+  filtering, 20s polling. Settings page: on-chain balance/income, deployed
+  services list. Children page: funding totals (now actually accumulated —
+  `fund_child` previously didn't update `fundedAmountCents`), reputation,
+  per-child "Check now" health button.
+- **Evals** — `evals/financial/` (confirm_deposit unknown-session,
+  withdrawal treasury-policy block) and `evals/revenue/` (deploy_service and
+  register_erc8004 "not configured" paths) — not yet run locally (this
+  environment's Node is v22; eve's CLI requires v24+), verified by careful
+  match against the existing passing evals' exact assertion patterns instead.
 
 ---
 
 ## 3. What's still pending — the real gap list
 
-### 3.0 🔴 Ledger/soul/memory/wallet state is not durable on Vercel yet
+### 3.0 ✅ Ledger/soul/memory/wallet state — now genuinely durable (Vercel Blob)
 
-**Found live in production, now stopgapped, not truly fixed.** `agent/lib/store.ts`
-persists everything (ledger, soul, memory, wallet, children registry) as plain
-JSON files under `.automaton/`. That's fine for local `eve dev`, but Vercel
-Functions have a **read-only filesystem** everywhere except `/tmp` — every
-write there was failing outright in production, `workflow-sdk` retried each
-failed step until exhausting its retry budget, and the whole turn crashed
-(visible in Vercel's runtime logs as `[workflow-sdk] Max retries reached,
-bubbling error to parent workflow`).
-
-**Stopgap applied:** `dataDir()` now writes to `/tmp/.automaton` when
-`process.env.VERCEL` is set, which stops the crash. **This is not real
-durability** — `/tmp` is wiped between cold starts and never shared across
-concurrent function instances, so the ledger balance, soul version, and even
-the wallet can silently reset. Do not treat production balances/history as
-trustworthy until this is replaced with a real database.
-
-**To actually fix:** swap the file-based `readJson`/`writeJson` in
-`agent/lib/store.ts` for a real persistent store behind the same two
-function signatures — a Vercel Marketplace Postgres or KV/Redis integration
-is the natural fit (`vercel:marketplace` skill / `vercel:vercel-storage`
-guidance covers provisioning). Every consumer (`ledger.ts`, `soul.ts`,
-`memory.ts`, `wallet.ts`, `registry.ts`, `heartbeat-state.ts`, `models.ts`)
-goes through this one module, so the fix is centralized — no call site
-elsewhere needs to change.
+**Previously a real production bug, now actually fixed, not stopgapped.**
+A `/tmp`-based stopgap (documented here in an earlier revision) caused a
+real Stripe deposit to appear to vanish: one serverless instance wrote it to
+its own `/tmp`, a later request landed on a different cold instance with an
+empty `/tmp`, and reported a stale/zero balance. `agent/lib/store.ts` now
+uses **Vercel Blob** (`@vercel/blob`, `access: "private"`, OIDC-based auth via
+`BLOB_STORE_ID`) as one real, shared store on Vercel, and plain JSON files
+under `.automaton/` in local `eve dev` (unchanged, for inspectability).
+`readJson`/`writeJson` are fully `async` now — every consumer (`ledger.ts`,
+`soul.ts`, `memory.ts`, `wallet.ts`, `registry.ts`, `heartbeat-state.ts`,
+`models.ts`, plus everything added in the revenue/enhancement rounds below)
+awaits them. Verified: a deposit made in one request is visible from a
+separate, later request/session — the actual bug this replaces.
 
 ### 3.1 🟡 `spawn_child` doesn't auto-deploy
 
@@ -190,18 +221,17 @@ but replication isn't autonomous end-to-end yet. **To close:** either build
 a Vercel deployment API call gated behind `always()` approval, or accept
 manual deployment as the permanent design.
 
-### 3.2 🟡 Real credentials not yet configured (by design, not oversight)
+### 3.2 Credential status (updated — most are now live)
 
-Every one of these currently returns an honest "not configured" error
-instead of faking success:
-
-| Feature | Env vars needed |
-|---|---|
-| Cloudflare domains/DNS | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
-| Stripe deposits/withdrawals | `STRIPE_SECRET_KEY`, `STRIPE_CONNECTED_ACCOUNT_ID` |
-| ERC-8004 on-chain identity | `RPC_URL`, `ERC8004_REGISTRY_ADDRESS` (wallet is now auto-generated — no key env var needed) |
-| Telegram channel | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_CHAT_ID` |
-| Real HTTP route auth | `ROUTE_AUTH_USERNAME`, `ROUTE_AUTH_PASSWORD` |
+| Feature | Env vars needed | Status |
+|---|---|---|
+| Cloudflare domains/DNS | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | ✅ configured |
+| Stripe deposits/withdrawals | `STRIPE_SECRET_KEY`, `STRIPE_CONNECTED_ACCOUNT_ID` | ✅ configured (Connect destination account may still need real onboarding — see withdraw errors) |
+| Telegram channel + alerts | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_CHAT_ID` | ✅ configured |
+| Real HTTP route auth | `ROUTE_AUTH_USERNAME`, `ROUTE_AUTH_PASSWORD` | ✅ configured |
+| Service deploys (`deploy_service`) | `AUTOMATON_VERCEL_TOKEN` (+ optional `AUTOMATON_VERCEL_TEAM_ID`) | ✅ configured |
+| ERC-8004 on-chain identity | `RPC_URL`, `ERC8004_REGISTRY_ADDRESS` | 🟡 not configured — needs a funded deployer wallet (contracts/README.md); code path is fully wired and verified (compile + typecheck), only the on-chain deploy step is outstanding |
+| x402 on-chain payments (secondary revenue path) | `RPC_URL` (same var as ERC-8004) | 🟡 not configured — optional; Stripe is the primary earning path and needs none of this |
 
 ### 3.3 🟢 Nice-to-haves, not blockers
 
@@ -209,7 +239,7 @@ instead of faking success:
 - `instrumentation.ts` (OpenTelemetry tracing) not configured — Vercel's automatic "Agent Runs" tab covers basic observability once deployed.
 - No `evals.config.ts` reporter (Braintrust) wired — console output is enough at this scale.
 - Git tools (`git_status` etc.) typecheck but haven't been eval-tested against a real repo with actual commits.
-- Dashboard sidebar doesn't auto-refresh vitals after every tool call (see 2.12) — manual "Refresh status" only.
+- New evals under `evals/financial/` and `evals/revenue/` (2.14) haven't been run locally — this dev machine's Node is v22, eve's CLI needs v24+. Run `npm run eval` on a Node 24+ machine (or in CI) to actually execute them.
 
 ---
 

@@ -26,10 +26,11 @@ export default defineTool({
       guidance: {
         high: "Full capability. Invest in growth and delegation.",
         normal: "Operate normally, spend deliberately.",
-        low_compute: "Conserve: short responses, no subagents, defer non-essential work.",
-        critical: "Emergency: do only survival-essential work and request funding.",
+        low_compute: "Conserve: short responses, no subagents, defer non-essential work. Load the revenue skill and take a concrete step.",
+        critical: "Emergency: do only survival-essential work. Load the revenue skill and take a concrete step — do not just wait on a request for funding.",
         dead: "Dormant. Await creator funding.",
       }[tier],
+      revenueFocusRecommended: tier === "low_compute" || tier === "critical",
       bornAt,
       ageHours: Math.round(ageHours * 10) / 10,
       memoryCount: await memoryCount(),

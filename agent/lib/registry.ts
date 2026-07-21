@@ -46,6 +46,16 @@ export async function updateChildStatus(id: string, status: ChildStatus): Promis
   return child;
 }
 
+/** fund_child sends money to an already-spawned child — this keeps fundedAmountCents a true running total, not just the initial spawn grant. */
+export async function addChildFunding(id: string, amountCents: number): Promise<Child | undefined> {
+  const children = await listChildren();
+  const child = children.find((c) => c.id === id);
+  if (!child) return undefined;
+  child.fundedAmountCents += amountCents;
+  await writeJson(CHILDREN_FILE, children);
+  return child;
+}
+
 export async function pruneDeadChildren(): Promise<number> {
   const children = await listChildren();
   const alive = children.filter((c) => c.status !== "dead");

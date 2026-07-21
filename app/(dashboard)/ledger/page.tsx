@@ -19,6 +19,18 @@ interface LedgerData {
   transactions: Transaction[];
 }
 
+interface DeployedService {
+  id: string;
+  name: string;
+  url: string;
+  status: string;
+  createdAt: string;
+  revenueCents: number;
+  paymentCount: number;
+}
+
+const POLL_INTERVAL_MS = 20_000;
+
 function formatUsd(cents?: number): string {
   if (cents == null) return "—";
   const sign = cents < 0 ? "-" : "";
@@ -297,15 +309,67 @@ function DepositReturnBanner({ onConfirmed }: { onConfirmed: () => void }) {
   );
 }
 
+function DeployedServicesCard({ services }: { services: DeployedService[] }) {
+  if (services.length === 0) {
+    return (
+      <div className="card">
+        <h2>Deployed services</h2>
+        <p className="empty-state">None yet — deploy_service publishes a real, public URL here once used.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="card">
+      <h2>Deployed services</h2>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Revenue</th>
+              <th>Payments</th>
+              <th>URL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {services.map((s) => (
+              <tr key={s.id}>
+                <td>{s.name}</td>
+                <td>
+                  <span className={`pill ${s.status === "active" ? "positive" : "negative"}`}>{s.status}</span>
+                </td>
+                <td className="positive">{formatUsd(s.revenueCents)}</td>
+                <td className="dim">{s.paymentCount}</td>
+                <td className="dim">
+                  <a href={s.url} target="_blank" rel="noreferrer">
+                    {s.url.replace(/^https?:\/\//, "")}
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const TX_FILTERS = ["all", "deposit", "upkeep", "transfer_out", "adjustment"] as const;
+
 function LedgerContent() {
   const [data, setData] = useState<LedgerData | null>(null);
+  const [services, setServices] = useState<DeployedService[]>([]);
   const [loading, setLoading] = useState(true);
+  const [txFilter, setTxFilter] = useState<(typeof TX_FILTERS)[number]>("all");
 
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/ledger");
-      setData(await res.json());
+      const [ledgerRes, servicesRes] = await Promise.all([fetch("/api/ledger"), fetch("/api/services")]);
+      setData(await ledgerRes.json());
+      const servicesData = await servicesRes.json();
+      setServices(servicesData.services ?? []);
     } finally {
       setLoading(false);
     }
@@ -313,7 +377,11 @@ function LedgerContent() {
 
   useEffect(() => {
     void load();
+    const interval = setInterval(() => void load(), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, []);
+
+  const filteredTransactions = data?.transactions.filter((t) => txFilter === "all" || t.type === txFilter) ?? [];
 
   return (
     <div className="page">
@@ -350,10 +418,32 @@ function LedgerContent() {
       <AddFundsCard onDeposited={load} />
       {data && <WithdrawCard balanceCents={data.balanceCents} onWithdrawn={load} />}
 
+      <DeployedServicesCard services={services} />
+
       <div className="card">
-        <h2>Transaction history</h2>
-        {!data || data.transactions.length === 0 ? (
-          <p className="empty-state">{loading ? "Loading…" : "No transactions yet — add funds above to get started."}</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <h2>Transaction history</h2>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {TX_FILTERS.map((f) => (
+              <button
+                key={f}
+                className="ghost"
+                style={{
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  opacity: txFilter === f ? 1 : 0.55,
+                }}
+                onClick={() => setTxFilter(f)}
+              >
+                {f === "all" ? "All" : f}
+              </button>
+            ))}
+          </div>
+        </div>
+        {!data || filteredTransactions.length === 0 ? (
+          <p className="empty-state">
+            {loading ? "Loading…" : txFilter === "all" ? "No transactions yet — add funds above to get started." : `No ${txFilter} transactions yet.`}
+          </p>
         ) : (
           <div className="table-scroll">
             <table>
@@ -367,7 +457,7 @@ function LedgerContent() {
                 </tr>
               </thead>
               <tbody>
-                {data.transactions.map((t) => (
+                {filteredTransactions.map((t) => (
                   <tr key={t.id}>
                     <td className="dim">{new Date(t.timestamp).toLocaleString()}</td>
                     <td>
