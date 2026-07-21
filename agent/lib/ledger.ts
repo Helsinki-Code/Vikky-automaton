@@ -35,24 +35,21 @@ interface Ledger {
 }
 
 const LEDGER_FILE = "ledger.json";
-const GENESIS_GRANT_CENTS = 1_000; // $10 starting allowance from the creator
 
+/**
+ * Starts at exactly $0. No fabricated starting balance — every cent this
+ * ledger ever shows must trace back to a real Stripe deposit (see
+ * agent/lib/deposits.ts). A fake "genesis grant" here would misrepresent
+ * money that was never actually paid, which is exactly the kind of claim
+ * the Constitution's honesty law forbids.
+ */
 function load(): Ledger {
   const existing = readJson<Ledger | null>(LEDGER_FILE, null);
   if (existing) return existing;
   const now = new Date().toISOString();
   const genesis: Ledger = {
-    balanceCents: GENESIS_GRANT_CENTS,
-    transactions: [
-      {
-        id: crypto.randomUUID(),
-        type: "deposit",
-        amountCents: GENESIS_GRANT_CENTS,
-        balanceAfterCents: GENESIS_GRANT_CENTS,
-        description: "Genesis grant from creator",
-        timestamp: now,
-      },
-    ],
+    balanceCents: 0,
+    transactions: [],
     createdAt: now,
   };
   writeJson(LEDGER_FILE, genesis);

@@ -35,6 +35,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "microsandbox": "^0.5.10",
     "solc": "^0.8.36",
     "typescript": "^5.9.3"
   }
