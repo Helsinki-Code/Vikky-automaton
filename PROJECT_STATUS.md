@@ -1,0 +1,223 @@
+# Vikky's Automaton (Eve rebuild) — Project Status
+
+Last updated: 2026-07-21 (post wallet/auth/heartbeat/model-switch rebuild + frontend dashboard)
+
+This document is the single source of truth for what's actually built, verified,
+and pending in the Eve-based rebuild of the Conway automaton, located at
+`vikky-automaton2/`. Every "done" item below has been either typechecked,
+run against a live local `eve dev` server, or both — nothing here is
+aspirational. Every "pending" item is a real gap, not a formality.
+
+---
+
+## 1. Architecture at a glance
+
+The automaton is an [eve](https://eve.dev) agent — a filesystem-defined,
+durable AI agent — replacing Conway Cloud (deprecated, auth backend down)
+with infrastructure you control:
+
+| Concern | Conway (old) | This rebuild |
+|---|---|---|
+| Compute | Conway sandbox API | Eve's `defaultBackend()` — Vercel Sandbox (hosted) → Docker → microsandbox → just-bash (local) |
+| Credits/billing | Conway credit API | Local JSON ledger (`agent/lib/ledger.ts`) + real Stripe Checkout/transfers |
+| Domains/DNS | Conway registrar | Real Cloudflare API |
+| Identity/wallet | Conway-provisioned | **Auto-generated on first boot** (`agent/lib/wallet.ts`), same viem/tweetnacl approach as the original |
+| Identity registry | Conway directory | ERC-8004 on-chain registry (viem), signed by the auto-generated wallet |
+| Agent runtime/loop | Custom (`src/agent/loop.ts`) | Eve's durable session/workflow engine |
+| State | SQLite (`better-sqlite3`) | Flat JSON files under `.automaton/` (simpler, fully inspectable, no concurrency guarantees) |
+| Messaging | Conway social relay | Telegram bot channel + direct agent-to-agent HTTP |
+| Route auth | N/A | `httpBasic()` when `ROUTE_AUTH_USERNAME`/`ROUTE_AUTH_PASSWORD` are set; falls back to a safe 401 stub otherwise |
+
+Every persistent concept (ledger, soul, memory, children registry, heartbeat
+state, wallet) is a plain JSON file under `.automaton/`, written via
+`agent/lib/store.ts`'s `readJson`/`writeJson`. This is deliberately **not**
+Eve's `defineState` — `defineState` is per-session and resets each
+conversation; these need to survive across every future session, so they're
+process-level files instead.
+
+---
+
+## 2. What's done and verified
+
+### 2.1 Core agent
+
+- **`agent/agent.ts`** — direct OpenAI provider (`gpt-5.2`) as the compile-time fallback, dynamically overridable per `switch_model` (see 2.8). Reads `OPENAI_API_KEY` from `.env.local`. ✅ Verified booting.
+- **`agent/instructions.ts`** (TypeScript, not markdown — see rationale below) — assembles the system prompt from `agent/lib/constitution.ts`'s single-source Constitution text plus full operating instructions referencing every tool. ✅
+- **`agent/lib/constitution.ts`** — the three-law Constitution, verbatim from the original `constitution.md`, as one exported constant. `instructions.ts` imports it; nothing hand-copies it anymore, so it cannot silently drift from the source. Both `instructions.ts` and this file are in `edit_own_file`'s protected-path set.
+- **`agent/hooks/ensure-wallet.ts`** — calls `getOrCreateWallet()` on every `session.started`; idempotent (checks the file first), so it's a real no-op after the very first session ever. ✅ Verified: deleted `.automaton/wallet.json`, restarted, sent one message, wallet was generated automatically before the tool even ran.
+- **`agent/sandbox/sandbox.ts`** — `defaultBackend()`, so it auto-picks the best available compute (Vercel Sandbox / Docker / microsandbox / just-bash). Bootstrap seeds `/workspace/projects` and `/workspace/notes`. ✅ Verified: real `bash` execution in `/workspace`.
+
+**Why `instructions.ts` instead of `instructions.md`:** Eve's own docs say a
+*static* prompt belongs in markdown, and you switch to TypeScript only when
+the prompt is *built* from typed helpers or shared constants — neither format
+is universally "better." Here, `.ts` is the correct choice specifically
+because the Constitution needed a single source of truth (`lib/constitution.ts`)
+that both `instructions.ts` and any future consumer can import, rather than
+being hand-copied prose that could silently drift from the original repo's
+`constitution.md`.
+
+### 2.2 Sovereign wallet (previously the biggest identity gap — now closed)
+
+- **`agent/lib/wallet.ts`** — `getOrCreateWallet()`: checks `.automaton/wallet.json`; if absent, generates a fresh EVM key (`viem/accounts`' `generatePrivateKey()`) or Solana keypair (`tweetnacl`), persists at `0o600`, never regenerates. Exactly the original repo's `src/identity/wallet.ts` approach, ported to Eve's hook lifecycle instead of a custom `src/index.ts` boot sequence.
+- **`check_wallet` tool** — reports the address/chain type/creation time.
+- **`agent/lib/erc8004.ts`** — now signs with this wallet directly (`getEvmAccount()`), instead of requiring an operator-supplied `WALLET_PRIVATE_KEY` env var. Only `RPC_URL`/`ERC8004_REGISTRY_ADDRESS` remain as external config.
+- **`system_synopsis`** now reports `walletAddress`, `chainType`, and the on-chain registry entry (if registered).
+- ✅ Verified live: deleted the wallet file, restarted the dev server, sent one message — the wallet was generated automatically with no manual step.
+
+### 2.3 Real route auth (previously `placeholderAuth()` only — now conditional-real)
+
+- **`agent/channels/eve.ts`** — `creatorAuth()` uses `httpBasic({ username, password })` from `ROUTE_AUTH_USERNAME`/`ROUTE_AUTH_PASSWORD` env vars when both are set; falls back to `placeholderAuth()` (a safe structured 401) only when they're absent. `vercelOidc()` and `localDev()` remain ahead of it for Vercel-to-Vercel and local dev traffic.
+- **Still pending:** no credentials are actually set yet in this environment — see §3.
+
+### 2.4 Dynamic heartbeat cadence (previously fake — now genuinely dynamic)
+
+- **`agent/lib/heartbeat-state.ts`** — real `intervalMinutes` + `lastHeartbeatRunAt` fields, `isHeartbeatDue()`/`markHeartbeatRun()`/`setIntervalMinutes()`.
+- **`agent/schedules/dynamic-tick.ts`** (new) — fires every minute (Eve's compiled cadence, unavoidable), but only does work — charging upkeep mechanically, no LLM call — when `isHeartbeatDue()` says so. Changing `intervalMinutes` via `modify_heartbeat` takes effect on the very next minute tick, no redeploy.
+- **`agent/lib/upkeep.ts`** (new, factored out) — the dedup-safe upkeep-charging logic, shared by both the `record_upkeep` tool and the new dispatcher, so the two paths can't drift out of sync.
+- **`modify_heartbeat` tool** — rewritten to actually call `setIntervalMinutes()`. Honest scope: this governs the *mechanical* upkeep cadence for real; the separate **LLM-driven reflection heartbeat** (`agent/schedules/heartbeat.ts`, unchanged, still fires every 15 minutes) is still compiled statically and needs `edit_own_file` + a redeploy to actually re-cadence — Eve has no API for a schedule's own cron to be dynamic, only for *whether a tick does anything* to be dynamic. That's the real boundary, not a shortcut.
+- ✅ Verified: full eval suite (including the heartbeat-dispatch eval) still green after the rebuild.
+
+### 2.5 Dynamic model switching (previously fake — now genuinely dynamic)
+
+- **`agent/lib/model-resolver.ts`** (new) — maps a `MODEL_CATALOG` entry to a real `@ai-sdk/openai` or `@ai-sdk/anthropic` `LanguageModel` instance.
+- **`agent/agent.ts`** — `model: defineDynamic({ fallback: openai("gpt-5.2"), events: { "step.started": () => resolveModel(getSelectedModel()) } })`. `switch_model`'s recorded preference is read fresh before every model call.
+- **Real bug caught and fixed during verification:** the first version resolved on `session.started`, which only accepts serializable model-id strings, not live `LanguageModel` objects — Eve logged `"Dynamic model resolver ... returned a provider object, but session- and turn-scoped model selections must be serializable"` and silently fell back to the compiled fallback every time. Moved the resolver to `step.started` (the only scope that accepts live `LanguageModel` instances per Eve's dynamic-capabilities contract) and the warning disappeared, confirmed via a second full eval run.
+- Installed `@ai-sdk/anthropic` so Claude catalog entries actually resolve (previously only OpenAI was installed).
+
+### 2.6 Tools — 57 authored tools + Eve's built-ins
+
+Built-in (no authoring needed): `bash`, `read_file`, `write_file`, `glob`,
+`grep`, `agent` (delegate to a fresh copy of self), `load_skill`,
+`ask_question`, `Workflow` (not enabled — see Pending).
+
+Authored, by category:
+
+| Category | Tools | Status |
+|---|---|---|
+| Vitals/survival | `check_vitals`, `record_upkeep`, `heartbeat_ping`, `sleep`, `enter_low_compute`, `distress_signal` | ✅ Verified live |
+| Memory | `remember`, `recall` | ✅ Verified live (round-trip eval) |
+| Soul | `read_soul`, `update_soul`, `reflect_on_soul` | ✅ Verified (read_soul eval) |
+| Ledger/financial | `transfer_funds`, `deposit_funds`, `create_deposit_link`, `confirm_deposit`, `request_withdrawal`, `check_inference_spending` | ✅ Deposit/transfer logic verified; Stripe calls need a real `STRIPE_SECRET_KEY` to fire for real (currently "not configured" stub) |
+| Treasury policy | enforced inside `transfer_funds`/`request_withdrawal`/`fund_child`/`spawn_child` via `agent/lib/policy.ts` | ✅ Verified — held even after human approval, in a live eval |
+| Self-modification | `edit_own_file`, `revert_last_edit`, `review_upstream_changes`, `pull_upstream`, `install_npm_package` | ✅ Protected-path enforcement verified live — now covers `instructions.ts` **and** `lib/constitution.ts` |
+| Git | `git_status`, `git_diff`, `git_commit`, `git_log`, `git_branch`, `git_push`, `git_clone` | Typechecked; not yet exercised in a real git repo via eval |
+| Skills | `list_skills`, `create_skill`, `remove_skill` | Typechecked |
+| Models | `list_models`, `switch_model` | ✅ **Genuinely live** — see 2.5 |
+| Identity/wallet | `check_wallet` (new) | ✅ Verified live — see 2.2 |
+| Identity/reputation | `register_erc8004` (real viem contract call, signed by the auto-wallet), `update_agent_card`, `discover_agents`, `give_feedback`, `check_reputation` | Typechecked; `register_erc8004` needs real `RPC_URL`/`ERC8004_REGISTRY_ADDRESS` to actually fire (wallet is no longer the blocker) |
+| Domains/DNS | `search_domains` (real RDAP check), `register_domain`, `manage_dns` | Typechecked; register/DNS need real `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` |
+| Replication | `spawn_child`, `list_children`, `fund_child`, `check_child_status`, `start_child`, `message_child`, `verify_child_constitution`, `prune_dead_children` | Typechecked; `spawn_child` deliberately writes a genesis config for **manual** deployment rather than auto-deploying (see Pending) |
+| Messaging | `send_message` (agent-to-agent HTTP) | Typechecked |
+| Heartbeat control | `modify_heartbeat` | ✅ **Genuinely live** — see 2.4 |
+| MCP | `install_mcp_server` | Writes a new `agent/connections/<name>.ts` file; takes effect on next reload/deploy, not immediately |
+| Misc | `expose_port`, `system_synopsis`, `update_genesis_prompt` | Typechecked |
+
+### 2.7 Channels
+
+- **`agent/channels/eve.ts`** — real `httpBasic()` auth when configured (see 2.3), safe fallback otherwise.
+- **`agent/channels/telegram.ts`** — real Telegram bot channel with inline-keyboard approvals for HITL, upload policy for images/PDFs. Needs `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`, `TELEGRAM_BOT_USERNAME` to activate; webhook registration is a manual one-time `curl` (Eve doesn't call `setWebhook` for you).
+
+### 2.8 Schedules
+
+- **`agent/schedules/heartbeat.ts`** — fires every 15 minutes (production) / dispatchable on-demand in dev via `POST /eve/v1/dev/schedules/heartbeat`. Task-mode: runs `check_vitals` → `record_upkeep` → tier-based behavior → optional memory write. ✅ Verified via eval.
+- **`agent/schedules/dynamic-tick.ts`** (new) — the real dynamic-cadence dispatcher. See 2.4.
+- **`agent/schedules/reflect.md`** — daily reflection at 06:00 UTC.
+- **`agent/schedules/status-ping.ts`** — daily 09:00 UTC Telegram status ping; no-ops until `TELEGRAM_CHAT_ID` is set.
+
+### 2.9 Subagents
+
+- **`agent/subagents/worker/`** — a lightweight (`reasoning: "low"`) specialist subagent for bounded, isolated tasks with its own sandbox, no ledger/memory tools.
+
+### 2.10 Eval suite — 12/12 passing, 33/33 gates, verified after every change this round
+
+Full suite under `evals/`, run with `eve eval`. Re-ran to green after the
+wallet/auth/heartbeat/model-switch/instructions.ts rebuild — nothing broke,
+and the suite caught the `session.started` vs `step.started` model-resolver
+bug described in 2.5 before it shipped.
+
+### 2.12 Frontend dashboard (previously nonexistent — now built and verified)
+
+- **`next.config.ts`** — `withEve(nextConfig)`, mounting this same project's `agent/` directory alongside the Next.js app. Same-origin, no CORS, no separate URL to keep in sync.
+- **`app/page.tsx`** — a real dashboard: a sidebar (live vitals parsed from the actual `check_vitals`/`system_synopsis` tool output, quick-action buttons) plus a full chat column using `eve/react`'s `useEveAgent()`. Renders text messages, tool-call badges, and — critically — **live HITL approval cards** with real approve/deny buttons wired to `agent.send({ inputResponses: [...] })`.
+- **`app/layout.tsx`**, **`app/globals.css`** — shell and styling (dark theme, tier-colored badges, no external UI library).
+- **`package.json`** scripts repointed: `dev`/`build`/`start` now run Next.js (which boots eve internally per `withEve`); `dev:agent-only`/`build:agent-only` keep the bare `eve dev`/`eve build` path for agent-only iteration.
+- ✅ **Verified live, not just typechecked:** booted the real dashboard in a browser, clicked "Refresh status" — the sidebar populated with the actual ledger balance ($9.80), HIGH tier, soul version, and memory count straight from a live `system_synopsis` call. Then sent `transfer_funds` from the chat input, watched a real HITL approval card render with Yes/No buttons (not "approve"/"deny" — Eve's default confirmation options), clicked "Yes", and confirmed the tool actually executed: ledger genuinely debited from $9.80 → $9.70, exactly matching what the ledger file would show. Full browser → Next.js → eve → tool → real-state-mutation round trip confirmed end to end.
+- **Known limitation, not a bug:** the sidebar only re-parses vitals when `check_vitals`/`system_synopsis` is actually called in the conversation — it doesn't auto-poll after unrelated tool calls (like the transfer above), so it can show a stale balance until you ask again or hit "Refresh status". Fine for a first version; an auto-refresh-after-financial-tool-calls behavior would be a nice-to-have polish item.
+
+### 2.13 Config / secrets currently set
+
+Only `OPENAI_API_KEY` is in `.env.local`. Everything else below is unset and
+its corresponding tools return honest "not configured" responses rather than
+faking success.
+
+---
+
+## 3. What's still pending — the real gap list
+
+### 3.1 🟡 `spawn_child` doesn't auto-deploy
+
+Writes a genesis config into the sandbox and instructs manual deployment
+(`npx eve init` + Vercel). Deliberate choice — auto-deploying to your own
+Vercel account without explicit confirmation felt like the wrong default —
+but replication isn't autonomous end-to-end yet. **To close:** either build
+a Vercel deployment API call gated behind `always()` approval, or accept
+manual deployment as the permanent design.
+
+### 3.2 🟡 Real credentials not yet configured (by design, not oversight)
+
+Every one of these currently returns an honest "not configured" error
+instead of faking success:
+
+| Feature | Env vars needed |
+|---|---|
+| Vercel Sandbox (hosted) | `VERCEL_TOKEN`, `VERCEL_TEAM_ID` |
+| Cloudflare domains/DNS | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
+| Stripe deposits/withdrawals | `STRIPE_SECRET_KEY`, `STRIPE_CONNECTED_ACCOUNT_ID` |
+| ERC-8004 on-chain identity | `RPC_URL`, `ERC8004_REGISTRY_ADDRESS` (wallet is now auto-generated — no key env var needed) |
+| Telegram channel | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_CHAT_ID` |
+| Real HTTP route auth | `ROUTE_AUTH_USERNAME`, `ROUTE_AUTH_PASSWORD` |
+
+### 3.3 🟢 Nice-to-haves, not blockers
+
+- `Workflow` tool (programmatic multi-subagent orchestration) not enabled — only relevant once there's more than one subagent worth orchestrating together.
+- `instrumentation.ts` (OpenTelemetry tracing) not configured — Vercel's automatic "Agent Runs" tab covers basic observability once deployed.
+- No `evals.config.ts` reporter (Braintrust) wired — console output is enough at this scale.
+- Git tools (`git_status` etc.) typecheck but haven't been eval-tested against a real repo with actual commits.
+- Dashboard sidebar doesn't auto-refresh vitals after every tool call (see 2.12) — manual "Refresh status" only.
+
+---
+
+## 4. Suggested build order for what remains
+
+1. **Wire real credentials** (3.2) for whichever of Cloudflare/Stripe/Vercel/Telegram/route-auth you actually want live now — this unlocks the most tools at once.
+2. **Decide on `spawn_child` auto-deploy** (3.1) — explicit product decision, not just an engineering task.
+3. Polish items from 3.3 as desired.
+
+---
+
+## 5. How to verify any of this yourself
+
+```bash
+# Typecheck everything
+npx tsc
+
+# Boot the full dashboard (Next.js + eve mounted together, requires Node 24+;
+# this machine's default is v22, use the PATH prefix below)
+PATH="/opt/homebrew/opt/node@26/bin:$PATH" npx next dev
+# then open http://localhost:3000 (or whatever port next dev picks)
+
+# Boot the agent alone, no UI (for eval/dev iteration)
+PATH="/opt/homebrew/opt/node@26/bin:$PATH" npx eve dev --no-ui
+
+# Run the full eval suite
+PATH="/opt/homebrew/opt/node@26/bin:$PATH" npx eve eval --max-concurrency 2
+
+# Manual smoke test
+curl -X POST http://127.0.0.1:2000/eve/v1/session \
+  -H 'content-type: application/json' \
+  -d '{"message":"Call check_wallet and check_vitals, tell me both."}'
+
+# Confirm the wallet auto-generates on a truly fresh boot
+rm -f .automaton/wallet.json
+# ...then send any message; .automaton/wallet.json reappears automatically.
+```

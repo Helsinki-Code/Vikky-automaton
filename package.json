@@ -1,0 +1,42 @@
+{
+  "name": "vikky-automaton2",
+  "version": "0.0.0",
+  "type": "module",
+  "imports": {
+    "#*": "./agent/*",
+    "#evals/*": "./evals/*"
+  },
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "start": "next start",
+    "dev:agent-only": "eve dev",
+    "build:agent-only": "eve build",
+    "eval": "eve eval",
+    "typecheck": "tsc",
+    "erc8004:compile": "node scripts/compile-erc8004.mjs",
+    "erc8004:deploy": "node scripts/deploy-erc8004.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.16",
+    "@ai-sdk/openai": "^4.0.16",
+    "@vercel/connect": "0.4.0",
+    "ai": "^7.0.26",
+    "bs58": "^6.0.0",
+    "eve": "^0.26.1",
+    "next": "^16.2.10",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tweetnacl": "^1.0.3",
+    "viem": "^2.55.4",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.x",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "microsandbox": "^0.6.6",
+    "solc": "^0.8.36",
+    "typescript": "7.0.2"
+  }
+}
