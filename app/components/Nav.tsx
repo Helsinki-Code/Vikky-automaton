@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { clearBasicAuth } from "../lib/client-auth";
 
 const LINKS = [
   { href: "/", label: "Chat", icon: "💬" },
@@ -20,7 +19,6 @@ export default function Nav() {
 
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
-    clearBasicAuth();
     router.replace("/login");
     router.refresh();
   }

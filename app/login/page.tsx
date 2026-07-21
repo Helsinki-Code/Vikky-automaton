@@ -2,7 +2,6 @@
 
 import { useState, Suspense, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { storeBasicAuth } from "../lib/client-auth";
 
 function LoginForm() {
   const router = useRouter();
@@ -27,7 +26,6 @@ function LoginForm() {
         setError(data.error || "Login failed.");
         return;
       }
-      storeBasicAuth(username, password);
       router.replace(params.get("next") || "/");
       router.refresh();
     } finally {

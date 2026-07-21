@@ -3,7 +3,6 @@
 import { useEveAgent } from "eve/react";
 import type { EveDynamicToolPart, EveMessagePart } from "eve/react";
 import { useMemo, useRef, useState, useEffect, type FormEvent } from "react";
-import { basicAuthHeader } from "../lib/client-auth";
 
 type Vitals = {
   balanceCents?: number;
@@ -96,7 +95,7 @@ function tierClass(tier?: string): string {
 }
 
 export default function ChatPage() {
-  const agent = useEveAgent({ headers: () => basicAuthHeader() });
+  const agent = useEveAgent({ host: "/api/eve-proxy" });
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
