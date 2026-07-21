@@ -21,12 +21,13 @@ const PENDING_FILE = "pending-deposits.json";
 export async function createDepositSession(
   amountCents: number,
   returnUrls: { successUrl: string; cancelUrl: string },
+  productName: string = "Automaton ledger deposit",
 ): Promise<{ paymentUrl: string; checkoutSessionId: string }> {
   const session = await stripe<{ id: string; url: string }>("POST", "/checkout/sessions", [
     ...encodeForm({ mode: "payment", success_url: returnUrls.successUrl, cancel_url: returnUrls.cancelUrl }),
     `line_items[0][price_data][currency]=usd`,
     `line_items[0][price_data][unit_amount]=${amountCents}`,
-    `line_items[0][price_data][product_data][name]=${encodeURIComponent("Automaton ledger deposit")}`,
+    `line_items[0][price_data][product_data][name]=${encodeURIComponent(productName)}`,
     `line_items[0][quantity]=1`,
   ]);
   const pending = await readJson<PendingDeposit[]>(PENDING_FILE, []);
@@ -45,7 +46,10 @@ export type ConfirmDepositResult =
   | { credited: true; amountCents: number; newBalanceCents: number; survivalTier: ReturnType<typeof getSurvivalTier> }
   | { credited: false; reason: string };
 
-export async function confirmDepositSession(checkoutSessionId: string): Promise<ConfirmDepositResult> {
+export async function confirmDepositSession(
+  checkoutSessionId: string,
+  description: string = `Stripe deposit ${checkoutSessionId}`,
+): Promise<ConfirmDepositResult> {
   const pending = await readJson<PendingDeposit[]>(PENDING_FILE, []);
   const record = pending.find((p) => p.sessionId === checkoutSessionId);
   if (!record) {
@@ -63,7 +67,7 @@ export async function confirmDepositSession(checkoutSessionId: string): Promise<
     return { credited: false, reason: `Payment status is "${session.payment_status}" — not paid yet.` };
   }
   const amountCents = session.amount_total;
-  const txn = await recordTransaction("deposit", amountCents, `Stripe deposit ${checkoutSessionId}`);
+  const txn = await recordTransaction("deposit", amountCents, description);
   record.credited = true;
   await writeJson(PENDING_FILE, pending);
   return {
