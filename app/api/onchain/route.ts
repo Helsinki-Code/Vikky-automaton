@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOrCreateWallet } from "../../../agent/lib/wallet";
-import { getUsdcBalanceDetailed } from "../../../agent/lib/x402";
+import { getTempoUsdcBalance } from "../../../agent/lib/tempo-balance";
 import { totalOnChainIncomeUsdc, recentOnChainIncome } from "../../../agent/lib/onchain-income";
 
 export async function GET() {
@@ -8,10 +8,11 @@ export async function GET() {
   if (wallet.chainType !== "evm") {
     return NextResponse.json({ evm: false });
   }
-  const balance = await getUsdcBalanceDetailed(wallet.address as `0x${string}`, "eip155:8453");
+  const balance = await getTempoUsdcBalance(wallet.address as `0x${string}`, "mainnet");
   return NextResponse.json({
     evm: true,
     address: wallet.address,
+    network: "Tempo mainnet",
     usdcBalance: balance.balance,
     usdcBalanceOk: balance.ok,
     usdcBalanceError: balance.error,

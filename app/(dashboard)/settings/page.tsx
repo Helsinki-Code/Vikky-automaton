@@ -133,7 +133,7 @@ export default function SettingsPage() {
         ) : (
           <>
             <div className="stat-row">
-              <span className="label">USDC balance (Base)</span>
+              <span className="label">USDC balance (Tempo)</span>
               <span>
                 {onchain.usdcBalanceOk ? `${onchain.usdcBalance?.toFixed(2)} USDC` : onchain.usdcBalanceError || "unavailable"}
               </span>
