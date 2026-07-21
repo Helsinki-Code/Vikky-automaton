@@ -21,6 +21,11 @@ export async function GET() {
       // by the platform itself), using Vercel's own ambient credentials.
       // Nothing reads a manual VERCEL_TOKEN/VERCEL_TEAM_ID in this project.
       vercelSandbox: !!process.env.VERCEL,
+      // Distinct from the platform's own deploy — this is the automaton's
+      // own token for deploy_service, letting it publish its own paid
+      // services as separate Vercel projects.
+      vercelDeploy: !!process.env.AUTOMATON_VERCEL_TOKEN,
+      x402: !!process.env.RPC_URL,
     },
   });
 }
