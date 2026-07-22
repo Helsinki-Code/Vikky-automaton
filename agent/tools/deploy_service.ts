@@ -3,7 +3,7 @@ import { always } from "eve/tools/approval";
 import { z } from "zod";
 import { loadVercelDeployConfig, collectSandboxFiles, createVercelDeployment, pollDeploymentReady } from "../lib/vercel-deploy";
 import { getOrCreateServiceRevenueSecret } from "../lib/service-secret";
-import { registerService, activeServiceCount } from "../lib/services";
+import { registerService, activeServiceCount, findServiceByName } from "../lib/services";
 
 /** Bounds how much Vercel infra a single automaton can spin up unattended. */
 const MAX_ACTIVE_SERVICES = 5;
@@ -86,12 +86,17 @@ export default defineTool({
       };
     }
 
-    const activeCount = await activeServiceCount();
-    if (activeCount >= MAX_ACTIVE_SERVICES) {
-      return {
-        deployed: false,
-        reason: `Already at the cap of ${MAX_ACTIVE_SERVICES} active services. Use list_services to review them and remove one before deploying another — this bounds how much billed infrastructure you can create unattended.`,
-      };
+    // A redeploy of an already-registered name reuses its slot and its
+    // stable id — only a genuinely new name counts against the cap.
+    const existingService = await findServiceByName(name);
+    if (!existingService) {
+      const activeCount = await activeServiceCount();
+      if (activeCount >= MAX_ACTIVE_SERVICES) {
+        return {
+          deployed: false,
+          reason: `Already at the cap of ${MAX_ACTIVE_SERVICES} active services. Use list_services to review them and remove_service one before deploying another (unless you're redeploying an existing name, which doesn't count against the cap) — this bounds how much billed infrastructure you can create unattended.`,
+        };
+      }
     }
 
     const sandbox = await ctx.getSandbox();
@@ -103,7 +108,7 @@ export default defineTool({
     const appBaseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : process.env.APP_BASE_URL;
-    const serviceId = crypto.randomUUID();
+    const serviceId = existingService?.id ?? crypto.randomUUID();
 
     let stripeHelperIncluded = false;
     if (appBaseUrl) {
@@ -125,14 +130,19 @@ export default defineTool({
     const finalState = await pollDeploymentReady(config, created.id);
     const readyUrl = finalState.url || created.url;
 
+    let registeredId: string | undefined;
     if (finalState.readyState === "READY") {
-      await registerService({
+      // May resolve to an existing entry if `name` was already deployed —
+      // registerService upserts by name, so this redeploy doesn't eat
+      // another slot against MAX_ACTIVE_SERVICES.
+      const registered = await registerService({
         id: serviceId,
         name,
         url: readyUrl,
         deploymentId: created.id,
         sourceDir,
       });
+      registeredId = registered.id;
     }
 
     return {
@@ -140,7 +150,7 @@ export default defineTool({
       readyState: finalState.readyState,
       url: readyUrl,
       deploymentId: created.id,
-      serviceId: finalState.readyState === "READY" ? serviceId : undefined,
+      serviceId: registeredId,
       filesDeployed: files.length,
       truncated,
       stripeHelperIncluded,

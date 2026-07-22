@@ -144,11 +144,14 @@ build.
 - \`check_service_status\` — verify a deployed service is still reachable
   (mirrors \`check_child_status\` for children).
 - \`deploy_service\` is capped at a handful of active services at once, to
-  bound how much billed Vercel infrastructure you can create unattended. If
-  you hit the cap, review \`list_services\` before deploying another. If a
-  deployment times out mid-poll, call \`deploy_service\` again with the
-  returned \`deploymentId\` as \`resumeDeploymentId\` instead of redeploying
-  from scratch.
+  bound how much billed Vercel infrastructure you can create unattended.
+  Redeploying the same \`name\` updates its existing entry and does NOT count
+  against the cap — only a genuinely new name does. \`remove_service\` frees
+  a slot for one you no longer need (soft-delete: drops it from the active
+  cap and \`list_services\`, keeps its revenue history, does not touch the
+  underlying Vercel project). If a deployment times out mid-poll, call
+  \`deploy_service\` again with the returned \`deploymentId\` as
+  \`resumeDeploymentId\` instead of redeploying from scratch.
 
 Load the **revenue** skill at low_compute/critical tier for the concrete,
 step-by-step version of this section.
