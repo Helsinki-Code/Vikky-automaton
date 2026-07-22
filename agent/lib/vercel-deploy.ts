@@ -96,7 +96,31 @@ export async function createVercelDeployment(
   if (!resp.ok) {
     throw new Error(`Vercel deployment failed: ${data?.error?.message || resp.statusText}`);
   }
+
+  // New projects on a team can inherit "Standard Protection" (Vercel
+  // Authentication) by default, which puts every deployment — including
+  // production — behind an SSO wall only team members can pass. A paid
+  // service nobody but the creator can reach is useless; disable it
+  // explicitly rather than relying on the team's default being off.
+  await disableDeploymentProtection(config, name).catch(() => {
+    // Best-effort: a failure here shouldn't fail the whole deploy, but the
+    // caller should still see the deployment as READY so the creator can
+    // fix protection manually if this silently didn't take.
+  });
+
   return { id: data.id, url: `https://${data.url}`, readyState: data.readyState };
+}
+
+async function disableDeploymentProtection(config: VercelDeployConfig, projectName: string): Promise<void> {
+  const query = config.teamId ? `?teamId=${encodeURIComponent(config.teamId)}` : "";
+  await fetch(`${VERCEL_API}/v9/projects/${encodeURIComponent(projectName)}${query}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ssoProtection: null }),
+  });
 }
 
 export async function pollDeploymentReady(

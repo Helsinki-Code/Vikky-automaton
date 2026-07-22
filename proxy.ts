@@ -10,6 +10,18 @@ import { authConfigured, verifySessionToken, SESSION_COOKIE_NAME } from "./app/l
  * middleware.ts convention in favor of proxy.ts; same request-interception
  * contract, new file name.
  */
+
+/**
+ * Server-to-server callback routes: called by services deploy_service
+ * publishes (a different origin entirely, so no browser session cookie
+ * ever reaches them) and gated by their own per-automaton secret header
+ * instead (see agent/lib/service-secret.ts). The session-cookie gate below
+ * would 307-redirect these to /login before the route handler ever runs —
+ * confirmed live: a deployed service's Stripe checkout call came back as
+ * an HTML redirect instead of JSON and broke on `.json()`.
+ */
+const SERVICE_CALLBACK_PREFIXES = ["/api/service-revenue/"];
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -19,7 +31,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/login") ||
     pathname.startsWith("/setup-required") ||
     pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    SERVICE_CALLBACK_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   ) {
     return NextResponse.next();
   }
