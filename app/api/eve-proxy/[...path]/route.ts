@@ -60,8 +60,18 @@ async function proxy(request: NextRequest, ctx: { params: Promise<{ path: string
     redirect: "manual",
   });
 
+  // fetch() already transparently decompresses the body, but the upstream's
+  // own content-encoding/content-length headers describe the *compressed*
+  // form — copying them verbatim onto a response carrying decompressed
+  // bytes breaks decoding client-side (silent stream failure). Let the
+  // runtime recompute framing headers for the response actually being sent.
+  const responseHeaders = new Headers(upstream.headers);
+  responseHeaders.delete("content-encoding");
+  responseHeaders.delete("content-length");
+  responseHeaders.delete("transfer-encoding");
+
   return new Response(upstream.body, {
     status: upstream.status,
-    headers: upstream.headers,
+    headers: responseHeaders,
   });
 }
